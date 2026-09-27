@@ -13,6 +13,8 @@ public class ExamplePlugin : IPlugin
     public ISaveFileProvider SaveFileEditor { get; private set; } = null!;
     public IPKMView PKMEditor { get; private set; } = null!;
 
+    public FormDiff formDiff = new FormDiff();
+
     public void Initialize(params object[] args)
     {
         Console.WriteLine($"Loading {Name}...");
@@ -36,7 +38,8 @@ public class ExamplePlugin : IPlugin
         tools.DropDownItems.Add(ctrl);
 
         var c2 = new ToolStripMenuItem($"{Name} sub form");
-        c2.Click += (_, _) => new Form().ShowDialog();
+        // c2.Click += (_, _) => new Form().ShowDialog();
+        c2.Click += (_, _) => formDiff.ShowDialog();
         var c3 = new ToolStripMenuItem($"{Name} show message");
         c3.Click += (_, _) => MessageBox.Show("Hello!");
         var c4 = new ToolStripMenuItem($"{Name} modify current SaveFile");

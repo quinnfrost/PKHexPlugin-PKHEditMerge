@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "PKHeXPluginExample": {
+      "commandName": "Executable",
+      "executablePath": ".\\PKHeX.exe",
+      "workingDirectory": "..\\..\\PKHeX\\PKHeX.WinForms\\bin\\Debug\\net10.0-windows\\win-x64"
+    }
+  }
+}
