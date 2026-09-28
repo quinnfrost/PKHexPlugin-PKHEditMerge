@@ -13,13 +13,14 @@ public class ExamplePlugin : IPlugin
     public ISaveFileProvider SaveFileEditor { get; private set; } = null!;
     public IPKMView PKMEditor { get; private set; } = null!;
 
-    public FormDiff formDiff = new FormDiff();
+    public FormDiff? formDiff;
 
     public void Initialize(params object[] args)
     {
         Console.WriteLine($"Loading {Name}...");
         SaveFileEditor = (ISaveFileProvider)Array.Find(args, z => z is ISaveFileProvider)!;
         PKMEditor = (IPKMView)Array.Find(args, z => z is IPKMView)!;
+        
         var menu = (ToolStrip)Array.Find(args, z => z is ToolStrip)!;
         LoadMenuStrip(menu);
     }
@@ -39,7 +40,11 @@ public class ExamplePlugin : IPlugin
 
         var c2 = new ToolStripMenuItem($"{Name} sub form");
         // c2.Click += (_, _) => new Form().ShowDialog();
-        c2.Click += (_, _) => formDiff.ShowDialog();
+        c2.Click += (_, _) =>
+        {
+            formDiff = new FormDiff(PKMEditor, SaveFileEditor.SAV);
+            formDiff.ShowDialog();
+        };
         var c3 = new ToolStripMenuItem($"{Name} show message");
         c3.Click += (_, _) => MessageBox.Show("Hello!");
         var c4 = new ToolStripMenuItem($"{Name} modify current SaveFile");
