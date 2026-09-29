@@ -194,6 +194,7 @@ namespace PKMMerge
             B_Export2.TabIndex = 10;
             B_Export2.Text = "Export";
             B_Export2.UseVisualStyleBackColor = true;
+            B_Export2.Click += B_Export2_Click;
             // 
             // FormDiff
             // 

@@ -36,44 +36,23 @@ public class PKMMerge : IPlugin
     private void AddPluginControl(ToolStripDropDownItem tools)
     {
         var ctrl = new ToolStripMenuItem(Name);
+        ctrl.Click += (_, _) => ShowDiffForm();
         tools.DropDownItems.Add(ctrl);
-
-        var c2 = new ToolStripMenuItem($"{Name} sub form");
-        // c2.Click += (_, _) => new Form().ShowDialog();
-        c2.Click += (_, _) =>
-        {
-            if (formDiff != null && !(formDiff.IsDisposed))
-            {
-                return;
-            }
-            formDiff = new FormDiff(PKMEditor, SaveFileEditor.SAV);
-            formDiff.Show();
-            formDiff.BringToFront();
-        };
-        var c3 = new ToolStripMenuItem($"{Name} show message");
-        c3.Click += (_, _) => MessageBox.Show("Hello!");
-        var c4 = new ToolStripMenuItem($"{Name} modify current SaveFile");
-        c4.Click += (_, _) => ModifySaveFile();
-        ctrl.DropDownItems.Add(c2);
-        ctrl.DropDownItems.Add(c3);
-        ctrl.DropDownItems.Add(c4);
         Console.WriteLine($"{Name} added menu items.");
     }
 
-    private void ModifySaveFile()
+    private void ShowDiffForm()
     {
-        var sav = SaveFileEditor.SAV;
-        sav.ModifyBoxes(ModifyPKM);
-        SaveFileEditor.ReloadSlots();
-    }
-
-    public static void ModifyPKM(PKM pk)
-    {
-        // Make everything Bulbasaur!
-        pk.Species = (ushort)Species.Bulbasaur;
-        pk.Move1 = (ushort)Move.Pound; // pound
-        pk.Move1_PP = 40;
-        CommonEdits.SetShiny(pk);
+        if (formDiff is null || formDiff.IsDisposed)
+        {
+            formDiff = new FormDiff(PKMEditor);
+            formDiff.Show();
+        }
+        else if (formDiff.WindowState == FormWindowState.Minimized)
+        {
+            formDiff.WindowState = FormWindowState.Normal;
+        }
+        formDiff.Activate();
     }
 
     public void NotifySaveLoaded()
