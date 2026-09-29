@@ -1,5 +1,5 @@
-# PKHeXPluginExample
+# PKHeXPlugin-PKMMerge
 
-An example project that compiles a .dll compatible with [PKHeX](https://github.com/kwsch/PKHeX)'s plugin loader.
+PKM comparison and merge plugin for [PKHeX](https://github.com/kwsch/PKHeX).
 
-To ensure the plugin loads correctly, be sure to rename the assembly, namespace, and class name of your new plugin such that they are unique to other plugins you may end up loading.
+Build the project in Debug to copy the plugin DLL and PDB to the local PKHeX build's `plugins` directory.

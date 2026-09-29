@@ -2,11 +2,11 @@ using System;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKHeXPluginExample;
+namespace PKMMerge;
 
-public class ExamplePlugin : IPlugin
+public class PKMMerge : IPlugin
 {
-    public string Name => nameof(ExamplePlugin);
+    public string Name => nameof(PKMMerge);
     public int Priority => 1; // Loading order, lowest is first.
 
     // Initialized on plugin load
@@ -42,8 +42,13 @@ public class ExamplePlugin : IPlugin
         // c2.Click += (_, _) => new Form().ShowDialog();
         c2.Click += (_, _) =>
         {
+            if (formDiff != null && !(formDiff.IsDisposed))
+            {
+                return;
+            }
             formDiff = new FormDiff(PKMEditor, SaveFileEditor.SAV);
-            formDiff.ShowDialog();
+            formDiff.Show();
+            formDiff.BringToFront();
         };
         var c3 = new ToolStripMenuItem($"{Name} show message");
         c3.Click += (_, _) => MessageBox.Show("Hello!");
