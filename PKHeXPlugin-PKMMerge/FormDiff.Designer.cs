@@ -66,8 +66,8 @@ namespace PKMMerge
             dataGridView1.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] { key, value1, op1, op2, value2 });
             dataGridView1.Location = new System.Drawing.Point(8, 128);
             dataGridView1.Margin = new System.Windows.Forms.Padding(2);
+            dataGridView1.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
             dataGridView1.Name = "dataGridView1";
-            dataGridView1.ReadOnly = true;
             dataGridView1.RowHeadersVisible = false;
             dataGridView1.RowHeadersWidth = 62;
             dataGridView1.Size = new System.Drawing.Size(704, 424);
@@ -87,7 +87,6 @@ namespace PKMMerge
             value1.HeaderText = "Value1";
             value1.MinimumWidth = 100;
             value1.Name = "value1";
-            value1.ReadOnly = true;
             // 
             // op1
             // 
@@ -118,7 +117,6 @@ namespace PKMMerge
             value2.MinimumWidth = 100;
             value2.Name = "value2";
             value2.ReadOnly = true;
-            // 
             // CB_HideSame
             // 
             CB_HideSame.Anchor = System.Windows.Forms.AnchorStyles.Top;

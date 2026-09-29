@@ -11,7 +11,8 @@ namespace PKMMerge
 {
     public partial class FormDiff : Form
     {
-        private enum DiffState { Different, Same, Empty }
+        // Declaration order is the Op column sort order.
+        private enum DiffState { Different, Same, Empty, Incomparable }
 
         private sealed class RowInfo(string key, PropertyInfo? pi1, PropertyInfo? pi2)
         {
@@ -22,6 +23,8 @@ namespace PKMMerge
             public bool IsEqual { get; set; }
             public bool CanCopy1 { get; set; }
             public bool CanCopy2 { get; set; }
+            public bool CanEdit1 { get; set; }
+            public bool CanEdit2 { get; set; }
         }
 
         // Different > Same > Empty, then by Key; descending flips only the group order.
@@ -40,6 +43,7 @@ namespace PKMMerge
 
         private static readonly Color SameColor = Color.LightGreen;
         private static readonly Color DiffColor = Color.LightCoral;
+        private static readonly Color IncomparableColor = Color.LightGray;
 
         // PKHeX deletes its own drag-out temp files after a similar delay, giving the drop target time to read them.
         private static readonly TimeSpan TempFileLifetime = TimeSpan.FromSeconds(20);
@@ -61,6 +65,10 @@ namespace PKMMerge
             dataGridView1.CellContentClick += OnDataGridViewCellClick;
             dataGridView1.ColumnHeaderMouseClick += OnColumnHeaderMouseClick;
             dataGridView1.Sorted += OnSorted;
+            dataGridView1.CellDoubleClick += OnCellDoubleClick;
+            dataGridView1.CellValidating += OnCellValidating;
+            dataGridView1.CellEndEdit += OnCellEndEdit;
+            dataGridView1.KeyDown += OnGridKeyDown;
             FormClosed += (_, _) =>
             {
                 pictureBox1.Image?.Dispose();
@@ -101,7 +109,7 @@ namespace PKMMerge
                     Evaluate(info, out var display1, out var display2);
                     if (CB_HideSame.Checked && info.IsEqual)
                         continue;
-                    if (CB_HideEmpty.Checked && info.State == DiffState.Empty)
+                    if (CB_HideEmpty.Checked && info.State is DiffState.Empty or DiffState.Incomparable)
                         continue;
 
                     var row = dataGridView1.Rows[dataGridView1.Rows.Add(key)];
@@ -132,39 +140,62 @@ namespace PKMMerge
 
         private void Evaluate(RowInfo info, out string display1, out string display2)
         {
-            display1 = info.Pi1 != null && pk1 != null ? GetPropertyDisplayText(info.Pi1, pk1) : "";
-            display2 = info.Pi2 != null && pk2 != null ? GetPropertyDisplayText(info.Pi2, pk2) : "";
+            var v1 = info.Pi1 != null && pk1 != null ? PropertyValue.Read(info.Pi1, pk1) : PropertyValue.None;
+            var v2 = info.Pi2 != null && pk2 != null ? PropertyValue.Read(info.Pi2, pk2) : PropertyValue.None;
+            display1 = v1.Display;
+            display2 = v2.Display;
+            info.IsEqual = false;
+            info.CanCopy1 = info.CanCopy2 = false;
+            info.CanEdit1 = pk1 != null && info.Pi1 != null && PropertyValue.CanEdit(info.Pi1);
+            info.CanEdit2 = pk2 != null && info.Pi2 != null && PropertyValue.CanEdit(info.Pi2);
+
+            if (!v1.IsComparable || !v2.IsComparable)
+            {
+                info.State = DiffState.Incomparable;
+                return;
+            }
 
             bool bothEmpty = string.IsNullOrEmpty(display1) && string.IsNullOrEmpty(display2);
             if (pk1 == null || pk2 == null)
             {
-                info.IsEqual = false;
                 info.State = bothEmpty ? DiffState.Empty : DiffState.Same;
-                info.CanCopy1 = info.CanCopy2 = false;
                 return;
             }
 
             info.IsEqual = info.Pi1 != null && info.Pi2 != null && display1 == display2;
             info.State = bothEmpty ? DiffState.Empty : info.IsEqual ? DiffState.Same : DiffState.Different;
+            if (info.State != DiffState.Different || info.Pi1 is not { } pi1 || info.Pi2 is not { } pi2)
+                return;
 
-            bool canCopy = info.State == DiffState.Different && info.Pi1 != null && info.Pi2 != null;
-            info.CanCopy1 = canCopy && info.Pi1!.CanRead && info.Pi2!.CanWrite;
-            info.CanCopy2 = canCopy && info.Pi2!.CanRead && info.Pi1!.CanWrite;
+            info.CanCopy1 = PropertyValue.CanCopy(pi1, pk1, pi2, pk2);
+            info.CanCopy2 = PropertyValue.CanCopy(pi2, pk2, pi1, pk1);
         }
+
+        private static readonly Color ReadOnlyTextColor = SystemColors.GrayText;
 
         private void ApplyRow(DataGridViewRow row, RowInfo info, string display1, string display2)
         {
-            row.Cells[value1.Index].Value = display1;
-            row.Cells[value2.Index].Value = display2;
+            SetValueCell(row.Cells[value1.Index], display1, info.CanEdit1);
+            SetValueCell(row.Cells[value2.Index], display2, info.CanEdit2);
 
-            Color? color = pk1 == null || pk2 == null ? null : info.State switch
+            Color? color = info.State switch
             {
+                DiffState.Incomparable => IncomparableColor,
+                _ when pk1 == null || pk2 == null => null,
                 DiffState.Different => DiffColor,
                 DiffState.Same => SameColor,
                 _ => null,
             };
             SetOpCell(row, op1.Index, info.CanCopy1 ? ">>" : null, color);
             SetOpCell(row, op2.Index, info.CanCopy2 ? "<<" : null, color);
+        }
+
+        private static void SetValueCell(DataGridViewCell cell, string display, bool canEdit)
+        {
+            cell.Value = display;
+            cell.ReadOnly = !canEdit;
+            cell.Style.ForeColor = canEdit ? Color.Empty : ReadOnlyTextColor;
+            cell.ErrorText = "";
         }
 
         private static void SetOpCell(DataGridViewRow row, int column, string? buttonText, Color? color)
@@ -220,9 +251,9 @@ namespace PKMMerge
             try
             {
                 if (toRight)
-                    pi2.SetValue(pk2, CloneValue(pi1.GetValue(pk1)));
+                    PropertyValue.Copy(pi1, pk1, pi2, pk2);
                 else
-                    pi1.SetValue(pk1, CloneValue(pi2.GetValue(pk2)));
+                    PropertyValue.Copy(pi2, pk2, pi1, pk1);
             }
             catch (Exception ex)
             {
@@ -239,6 +270,81 @@ namespace PKMMerge
                     UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: false);
                 else
                     UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: false);
+            });
+        }
+
+        private bool TryGetEditTarget(int rowIndex, int columnIndex, out RowInfo info, out PropertyInfo pi, out PKM pk)
+        {
+            info = null!;
+            pi = null!;
+            pk = null!;
+            if (rowIndex < 0 || dataGridView1.Rows[rowIndex].Tag is not RowInfo row)
+                return false;
+            info = row;
+
+            if (columnIndex == value1.Index && row is { CanEdit1: true, Pi1: { } p1 } && pk1 is { } k1)
+                (pi, pk) = (p1, k1);
+            else if (columnIndex == value2.Index && row is { CanEdit2: true, Pi2: { } p2 } && pk2 is { } k2)
+                (pi, pk) = (p2, k2);
+            else
+                return false;
+            return true;
+        }
+
+        private void OnCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (TryGetEditTarget(e.RowIndex, e.ColumnIndex, out _, out _, out _))
+                dataGridView1.BeginEdit(selectAll: true);
+        }
+
+        private void OnGridKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.F2 || dataGridView1.CurrentCell is not { } cell)
+                return;
+            if (TryGetEditTarget(cell.RowIndex, cell.ColumnIndex, out _, out _, out _))
+            {
+                dataGridView1.BeginEdit(selectAll: true);
+                e.Handled = true;
+            }
+        }
+
+        private void OnCellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
+        {
+            if (!dataGridView1.IsCurrentCellInEditMode)
+                return;
+            if (!TryGetEditTarget(e.RowIndex, e.ColumnIndex, out var info, out var pi, out var pk))
+                return;
+
+            var cell = dataGridView1.Rows[e.RowIndex].Cells[e.ColumnIndex];
+            var text = e.FormattedValue?.ToString() ?? "";
+            if (text == (cell.Value?.ToString() ?? ""))
+                return;
+
+            if (!PropertyValue.TryWrite(pi, pk, text, out var error))
+            {
+                // Keep the editor open so the value can be corrected; Esc reverts.
+                cell.ErrorText = $"{info.Key}: {error}";
+                e.Cancel = true;
+                var rect = dataGridView1.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, cutOverflow: false);
+                toolTip1.Show($"{error} (Esc to cancel)", dataGridView1, rect.Left, rect.Bottom, 4000);
+            }
+            else
+            {
+                toolTip1.Hide(dataGridView1);
+            }
+        }
+
+        private void OnCellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        {
+            bool left = e.ColumnIndex == value1.Index;
+            // Deferred: a refresh rewrites cells, which must not happen while the grid is still ending the edit.
+            BeginInvoke(() =>
+            {
+                RefreshRows();
+                if (left && pk1 != null)
+                    UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: false);
+                else if (!left && pk2 != null)
+                    UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: false);
             });
         }
 
@@ -294,28 +400,6 @@ namespace PKMMerge
             var old = pb.Image;
             pb.Image = img;
             old?.Dispose();
-        }
-
-        // Avoid sharing array instances between the two entities.
-        private static object? CloneValue(object? value) => value is Array a ? a.Clone() : value;
-
-        private static string GetPropertyDisplayText(PropertyInfo pi, PKM pk)
-        {
-            var type = pi.PropertyType;
-            if (type.IsByRefLike || !pi.CanRead || pi.GetIndexParameters().Length != 0)
-                return type.ToString();
-
-            object? value;
-            try { value = pi.GetValue(pk); }
-            catch (TargetInvocationException) { return "<error>"; }
-
-            return value switch
-            {
-                null => "null",
-                byte[] b => Convert.ToHexString(b),
-                Array a => string.Join(", ", a.Cast<object?>()),
-                _ => value.ToString() ?? "null",
-            };
         }
 
         private void SetSide(int side, PKM pk, bool fromEditor)
