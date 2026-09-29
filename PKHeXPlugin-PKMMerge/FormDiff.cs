@@ -41,14 +41,21 @@ namespace PKMMerge
         private static readonly Color SameColor = Color.LightGreen;
         private static readonly Color DiffColor = Color.LightCoral;
 
+        // PKHeX deletes its own drag-out temp files after a similar delay, giving the drop target time to read them.
+        private static readonly TimeSpan TempFileLifetime = TimeSpan.FromSeconds(20);
+
         private readonly IPKMView edit;
+        private readonly ISaveFileProvider saveProvider;
         public PKM? pk1;
         public PKM? pk2;
 
         private DataGridViewColumn? sortColumn;
         private ListSortDirection sortDirection;
 
-        public FormDiff(IPKMView edit)
+        private Rectangle dragBox = Rectangle.Empty;
+        private int dragSourceSide;
+
+        public FormDiff(IPKMView edit, ISaveFileProvider saveProvider)
         {
             InitializeComponent();
             dataGridView1.CellContentClick += OnDataGridViewCellClick;
@@ -61,15 +68,14 @@ namespace PKMMerge
             };
 
             this.edit = edit;
-            pk1 = edit.PreparePKM();
-            UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: true);
-            UpdateList();
+            this.saveProvider = saveProvider;
+            SetupDragDrop(GB_PKM1, pictureBox1, side: 1);
+            SetupDragDrop(GB_PKM2, pictureBox2, side: 2);
         }
 
         /// <summary>Rebuilds all rows, applying the Hide filters and the current sort.</summary>
         public void UpdateList()
         {
-            var pk1 = this.pk1 ??= edit.PreparePKM();
             var batch = EntityBatchEditor.Instance;
             string? topKey = GetTopKey();
 
@@ -77,12 +83,15 @@ namespace PKMMerge
             try
             {
                 dataGridView1.Rows.Clear();
+                if (pk1 == null && pk2 == null)
+                    return;
 
                 // Properties[0] is the union of all entity types; per-type lists are offset by type index, not Generation.
                 foreach (var key in batch.Properties[0])
                 {
-                    batch.TryGetHasProperty(pk1, key, out var pi1);
-                    PropertyInfo? pi2 = null;
+                    PropertyInfo? pi1 = null, pi2 = null;
+                    if (pk1 != null)
+                        batch.TryGetHasProperty(pk1, key, out pi1);
                     if (pk2 != null)
                         batch.TryGetHasProperty(pk2, key, out pi2);
                     if (pi1 == null && pi2 == null)
@@ -127,7 +136,7 @@ namespace PKMMerge
             display2 = info.Pi2 != null && pk2 != null ? GetPropertyDisplayText(info.Pi2, pk2) : "";
 
             bool bothEmpty = string.IsNullOrEmpty(display1) && string.IsNullOrEmpty(display2);
-            if (pk2 == null)
+            if (pk1 == null || pk2 == null)
             {
                 info.IsEqual = false;
                 info.State = bothEmpty ? DiffState.Empty : DiffState.Same;
@@ -148,7 +157,7 @@ namespace PKMMerge
             row.Cells[value1.Index].Value = display1;
             row.Cells[value2.Index].Value = display2;
 
-            Color? color = pk2 == null ? null : info.State switch
+            Color? color = pk1 == null || pk2 == null ? null : info.State switch
             {
                 DiffState.Different => DiffColor,
                 DiffState.Same => SameColor,
@@ -309,17 +318,150 @@ namespace PKMMerge
             };
         }
 
+        private void SetSide(int side, PKM pk, bool fromEditor)
+        {
+            if (side == 1)
+            {
+                pk1 = pk;
+                UpdateHeader(pictureBox1, TB_PKM1_Name, pk, fromEditor);
+            }
+            else
+            {
+                pk2 = pk;
+                UpdateHeader(pictureBox2, TB_PKM2_Name, pk, fromEditor);
+            }
+        }
+
+        #region Drag & Drop
+
+        private void SetupDragDrop(Control area, PictureBox sprite, int side)
+        {
+            foreach (var c in new[] { area }.Concat(area.Controls.Cast<Control>()))
+            {
+                c.AllowDrop = true;
+                c.DragEnter += (_, e) => OnAreaDragEnter(e, side);
+                c.DragDrop += (_, e) => OnAreaDragDrop(e, side);
+            }
+
+            sprite.MouseDown += (_, e) =>
+            {
+                var size = SystemInformation.DragSize;
+                dragBox = e.Button == MouseButtons.Left
+                    ? new Rectangle(e.X - (size.Width / 2), e.Y - (size.Height / 2), size.Width, size.Height)
+                    : Rectangle.Empty;
+            };
+            sprite.MouseUp += (_, _) => dragBox = Rectangle.Empty;
+            sprite.MouseMove += (_, e) =>
+            {
+                if (e.Button != MouseButtons.Left || dragBox == Rectangle.Empty || dragBox.Contains(e.Location))
+                    return;
+                dragBox = Rectangle.Empty;
+                BeginDragOut(sprite, side);
+            };
+        }
+
+        private void OnAreaDragEnter(DragEventArgs e, int side)
+        {
+            bool accept = side != dragSourceSide
+                && e.Data?.GetDataPresent(DataFormats.FileDrop) == true
+                && e.AllowedEffect.HasFlag(DragDropEffects.Copy);
+            // Must be Copy: PKHeX's box slots treat Link as "moved to another slot".
+            e.Effect = accept ? DragDropEffects.Copy : DragDropEffects.None;
+        }
+
+        private void OnAreaDragDrop(DragEventArgs e, int side)
+        {
+            if (side == dragSourceSide || e.Data?.GetData(DataFormats.FileDrop) is not string[] { Length: not 0 } files)
+                return;
+
+            // Two files dropped at once fill both sides, starting with the drop target.
+            int other = side == 1 ? 2 : 1;
+            int[] sides = files.Length >= 2 ? [side, other] : [side];
+            for (int i = 0; i < sides.Length; i++)
+            {
+                if (!TryLoadFile(files[i], out var pk, out var error))
+                {
+                    MessageBox.Show($"Unable to load \"{System.IO.Path.GetFileName(files[i])}\": {error}", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    continue;
+                }
+                SetSide(sides[i], pk, fromEditor: false);
+            }
+            UpdateList();
+        }
+
+        private bool TryLoadFile(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PKM? pk, out string error)
+        {
+            pk = null;
+            try
+            {
+                var sav = saveProvider.SAV;
+                pk = FileUtil.GetSupportedFile(path, sav) switch
+                {
+                    PKM p => p,
+                    MysteryGift g => g.ConvertToPKM(sav),
+                    IEncounterConvertible enc => enc.ConvertToPKM(sav),
+                    _ => null,
+                };
+                error = pk == null ? "not a supported PKM file." : "";
+                return pk != null;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private void BeginDragOut(PictureBox sprite, int side)
+        {
+            var source = side == 1 ? pk1 : pk2;
+            if (source == null)
+                return;
+
+            string? file = null;
+            dragSourceSide = side;
+            try
+            {
+                var pk = source.Clone();
+                pk.ForcePartyData();
+                var data = new byte[pk.SIZE_PARTY];
+                pk.WriteDecryptedDataParty(data);
+
+                file = FileUtil.GetPKMTempFileName(pk, encrypt: false);
+                System.IO.File.WriteAllBytes(file, data);
+                sprite.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { file }), DragDropEffects.Copy);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Drag && Drop failed: {ex.Message}", Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                dragSourceSide = 0;
+                if (file != null)
+                    _ = DeleteLaterAsync(file);
+            }
+        }
+
+        private static async System.Threading.Tasks.Task DeleteLaterAsync(string file)
+        {
+            await System.Threading.Tasks.Task.Delay(TempFileLifetime).ConfigureAwait(false);
+            try { System.IO.File.Delete(file); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        #endregion
+
         private void B_Import1_Click(object sender, EventArgs e)
         {
-            pk1 = edit.PreparePKM();
-            UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: true);
+            SetSide(1, edit.PreparePKM(), fromEditor: true);
             UpdateList();
         }
 
         private void B_Import2_Click(object sender, EventArgs e)
         {
-            pk2 = edit.PreparePKM();
-            UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: true);
+            SetSide(2, edit.PreparePKM(), fromEditor: true);
             UpdateList();
         }
 

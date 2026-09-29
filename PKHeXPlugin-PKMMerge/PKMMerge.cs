@@ -46,7 +46,7 @@ public class PKMMerge : IPlugin
     {
         if (formDiff is null || formDiff.IsDisposed)
         {
-            formDiff = new FormDiff(PKMEditor);
+            formDiff = new FormDiff(PKMEditor, SaveFileEditor);
             formDiff.Show();
         }
         else if (formDiff.WindowState == FormWindowState.Minimized)
