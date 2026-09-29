@@ -60,6 +60,7 @@ namespace PKMMerge
             dataGridView1.Margin = new System.Windows.Forms.Padding(2);
             dataGridView1.Name = "dataGridView1";
             dataGridView1.ReadOnly = true;
+            dataGridView1.RowHeadersVisible = false;
             dataGridView1.RowHeadersWidth = 62;
             dataGridView1.Size = new System.Drawing.Size(711, 308);
             dataGridView1.TabIndex = 0;
@@ -81,23 +82,26 @@ namespace PKMMerge
             // 
             // op1
             // 
+            op1.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             op1.HeaderText = "Op1";
             op1.MinimumWidth = 8;
             op1.Name = "op1";
             op1.ReadOnly = true;
+            op1.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.Programmatic;
             op1.Width = 50;
             // 
             // op2
             // 
+            op2.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             op2.HeaderText = "Op2";
             op2.Name = "op2";
             op2.ReadOnly = true;
+            op2.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.Programmatic;
             op2.Width = 50;
             // 
             // value2
             // 
             value2.HeaderText = "Value2";
-            value2.MinimumWidth = 8;
             value2.Name = "value2";
             value2.ReadOnly = true;
             value2.Resizable = System.Windows.Forms.DataGridViewTriState.True;
@@ -152,6 +156,7 @@ namespace PKMMerge
             pictureBox1.Name = "pictureBox1";
             pictureBox1.Size = new System.Drawing.Size(82, 75);
             pictureBox1.TabIndex = 5;
+            pictureBox1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             pictureBox1.TabStop = false;
             // 
             // pictureBox2
@@ -159,6 +164,7 @@ namespace PKMMerge
             pictureBox2.Location = new System.Drawing.Point(366, 39);
             pictureBox2.Name = "pictureBox2";
             pictureBox2.Size = new System.Drawing.Size(86, 73);
+            pictureBox2.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             pictureBox2.TabIndex = 6;
             pictureBox2.TabStop = false;
             // 

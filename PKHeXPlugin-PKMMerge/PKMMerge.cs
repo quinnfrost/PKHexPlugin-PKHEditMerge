@@ -22,6 +22,7 @@ public class PKMMerge : IPlugin
         PKMEditor = (IPKMView)Array.Find(args, z => z is IPKMView)!;
         
         var menu = (ToolStrip)Array.Find(args, z => z is ToolStrip)!;
+        PKMSprite.Host = menu;
         LoadMenuStrip(menu);
     }
 

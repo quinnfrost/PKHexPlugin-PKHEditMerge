@@ -1,5 +1,7 @@
 using PKHeX.Core;
 using System;
+using System.Collections;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
@@ -9,110 +11,280 @@ namespace PKMMerge
 {
     public partial class FormDiff : Form
     {
+        private enum DiffState { Different, Same, Empty }
+
+        private sealed class RowInfo(string key, PropertyInfo? pi1, PropertyInfo? pi2)
+        {
+            public string Key { get; } = key;
+            public PropertyInfo? Pi1 { get; } = pi1;
+            public PropertyInfo? Pi2 { get; } = pi2;
+            public DiffState State { get; set; }
+            public bool IsEqual { get; set; }
+            public bool CanCopy1 { get; set; }
+            public bool CanCopy2 { get; set; }
+        }
+
+        // Different > Same > Empty, then by Key; descending flips only the group order.
+        private sealed class StateComparer(ListSortDirection direction) : IComparer
+        {
+            public int Compare(object? x, object? y)
+            {
+                var a = (RowInfo)((DataGridViewRow)x!).Tag!;
+                var b = (RowInfo)((DataGridViewRow)y!).Tag!;
+                int cmp = a.State.CompareTo(b.State);
+                if (direction == ListSortDirection.Descending)
+                    cmp = -cmp;
+                return cmp != 0 ? cmp : StringComparer.OrdinalIgnoreCase.Compare(a.Key, b.Key);
+            }
+        }
+
+        private static readonly Color SameColor = Color.LightGreen;
+        private static readonly Color DiffColor = Color.LightCoral;
+
         private readonly IPKMView edit;
         public PKM? pk1;
         public PKM? pk2;
+
+        private DataGridViewColumn? sortColumn;
+        private ListSortDirection sortDirection;
 
         public FormDiff(IPKMView edit)
         {
             InitializeComponent();
             dataGridView1.CellContentClick += OnDataGridViewCellClick;
+            dataGridView1.ColumnHeaderMouseClick += OnColumnHeaderMouseClick;
+            dataGridView1.Sorted += OnSorted;
+            FormClosed += (_, _) =>
+            {
+                pictureBox1.Image?.Dispose();
+                pictureBox2.Image?.Dispose();
+            };
 
             this.edit = edit;
             pk1 = edit.PreparePKM();
-            TB_PKM1_Name.Text = $"\"{pk1.Nickname}\"";
+            UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: true);
             UpdateList();
         }
 
+        /// <summary>Rebuilds all rows, applying the Hide filters and the current sort.</summary>
         public void UpdateList()
         {
-            dataGridView1.Rows.Clear();
-
             var pk1 = this.pk1 ??= edit.PreparePKM();
             var batch = EntityBatchEditor.Instance;
+            string? topKey = GetTopKey();
 
-            // Properties[0] is the union of all entity types; per-type lists are offset by type index, not Generation.
-            foreach (var item in batch.Properties[0])
+            dataGridView1.SuspendLayout();
+            try
             {
-                bool has1 = batch.TryGetHasProperty(pk1, item, out var pi1);
-                PropertyInfo? pi2 = null;
-                bool has2 = pk2 != null && batch.TryGetHasProperty(pk2, item, out pi2);
-                if (!has1 && !has2)
-                    continue;
+                dataGridView1.Rows.Clear();
 
-                string display1 = has1 ? GetPropertyDisplayText(pi1!, pk1) : "";
-                if (pk2 == null)
+                // Properties[0] is the union of all entity types; per-type lists are offset by type index, not Generation.
+                foreach (var key in batch.Properties[0])
                 {
-                    if (CB_HideEmpty.Checked && string.IsNullOrEmpty(display1))
+                    batch.TryGetHasProperty(pk1, key, out var pi1);
+                    PropertyInfo? pi2 = null;
+                    if (pk2 != null)
+                        batch.TryGetHasProperty(pk2, key, out pi2);
+                    if (pi1 == null && pi2 == null)
                         continue;
-                    AddRow(item, display1, "", canCopy1: false, canCopy2: false);
-                    continue;
+
+                    var info = new RowInfo(key, pi1, pi2);
+                    Evaluate(info, out var display1, out var display2);
+                    if (CB_HideSame.Checked && info.IsEqual)
+                        continue;
+                    if (CB_HideEmpty.Checked && info.State == DiffState.Empty)
+                        continue;
+
+                    var row = dataGridView1.Rows[dataGridView1.Rows.Add(key)];
+                    row.Tag = info;
+                    ApplyRow(row, info, display1, display2);
                 }
 
-                string display2 = has2 ? GetPropertyDisplayText(pi2!, pk2) : "";
-                bool isEqual = has1 && has2 && display1 == display2;
-                if (CB_HideSame.Checked && isEqual)
-                    continue;
-                if (CB_HideEmpty.Checked && string.IsNullOrEmpty(display1) && string.IsNullOrEmpty(display2))
-                    continue;
-
-                bool canCopy1 = !isEqual && has1 && has2 && pi1!.CanRead && pi2!.CanWrite;
-                bool canCopy2 = !isEqual && has1 && has2 && pi2!.CanRead && pi1!.CanWrite;
-                AddRow(item, display1, display2, canCopy1, canCopy2);
+                ApplySort();
+                RestoreTop(topKey);
+            }
+            finally
+            {
+                dataGridView1.ResumeLayout();
             }
         }
 
-        private void AddRow(string key, string display1, string display2, bool canCopy1, bool canCopy2)
+        /// <summary>Re-reads values for the existing rows without removing or reordering any of them.</summary>
+        private void RefreshRows()
         {
-            int idx = dataGridView1.Rows.Add(key, display1, canCopy1 ? ">>" : "", canCopy2 ? "<<" : "", display2);
-            var row = dataGridView1.Rows[idx];
-            if (!canCopy1)
-                row.Cells[op1.Index] = new DataGridViewTextBoxCell();
-            if (!canCopy2)
-                row.Cells[op2.Index] = new DataGridViewTextBoxCell();
-            if (canCopy1 || canCopy2)
+            foreach (DataGridViewRow row in dataGridView1.Rows)
             {
-                row.Cells[value1.Index].Style.BackColor = Color.MistyRose;
-                row.Cells[value2.Index].Style.BackColor = Color.MistyRose;
+                if (row.Tag is not RowInfo info)
+                    continue;
+                Evaluate(info, out var display1, out var display2);
+                ApplyRow(row, info, display1, display2);
+            }
+        }
+
+        private void Evaluate(RowInfo info, out string display1, out string display2)
+        {
+            display1 = info.Pi1 != null && pk1 != null ? GetPropertyDisplayText(info.Pi1, pk1) : "";
+            display2 = info.Pi2 != null && pk2 != null ? GetPropertyDisplayText(info.Pi2, pk2) : "";
+
+            bool bothEmpty = string.IsNullOrEmpty(display1) && string.IsNullOrEmpty(display2);
+            if (pk2 == null)
+            {
+                info.IsEqual = false;
+                info.State = bothEmpty ? DiffState.Empty : DiffState.Same;
+                info.CanCopy1 = info.CanCopy2 = false;
+                return;
+            }
+
+            info.IsEqual = info.Pi1 != null && info.Pi2 != null && display1 == display2;
+            info.State = bothEmpty ? DiffState.Empty : info.IsEqual ? DiffState.Same : DiffState.Different;
+
+            bool canCopy = info.State == DiffState.Different && info.Pi1 != null && info.Pi2 != null;
+            info.CanCopy1 = canCopy && info.Pi1!.CanRead && info.Pi2!.CanWrite;
+            info.CanCopy2 = canCopy && info.Pi2!.CanRead && info.Pi1!.CanWrite;
+        }
+
+        private void ApplyRow(DataGridViewRow row, RowInfo info, string display1, string display2)
+        {
+            row.Cells[value1.Index].Value = display1;
+            row.Cells[value2.Index].Value = display2;
+
+            Color? color = pk2 == null ? null : info.State switch
+            {
+                DiffState.Different => DiffColor,
+                DiffState.Same => SameColor,
+                _ => null,
+            };
+            SetOpCell(row, op1.Index, info.CanCopy1 ? ">>" : null, color);
+            SetOpCell(row, op2.Index, info.CanCopy2 ? "<<" : null, color);
+        }
+
+        private static void SetOpCell(DataGridViewRow row, int column, string? buttonText, Color? color)
+        {
+            var cell = row.Cells[column];
+            if (buttonText != null && cell is not DataGridViewButtonCell)
+                row.Cells[column] = cell = new DataGridViewButtonCell { FlatStyle = FlatStyle.Flat };
+            else if (buttonText == null && cell is not DataGridViewTextBoxCell)
+                row.Cells[column] = cell = new DataGridViewTextBoxCell();
+
+            cell.Value = buttonText ?? "";
+            cell.Style.BackColor = color ?? Color.Empty;
+            cell.Style.SelectionBackColor = color is { } c ? Darken(c) : Color.Empty;
+            cell.Style.SelectionForeColor = color.HasValue ? Color.Black : Color.Empty;
+        }
+
+        private static Color Darken(Color c) => Color.FromArgb(c.A, c.R * 4 / 5, c.G * 4 / 5, c.B * 4 / 5);
+
+        private string? GetTopKey()
+        {
+            int top = dataGridView1.FirstDisplayedScrollingRowIndex;
+            return top >= 0 && top < dataGridView1.Rows.Count ? (dataGridView1.Rows[top].Tag as RowInfo)?.Key : null;
+        }
+
+        private void RestoreTop(string? key)
+        {
+            if (key == null)
+                return;
+            foreach (DataGridViewRow row in dataGridView1.Rows)
+            {
+                if (row.Tag is RowInfo info && info.Key == key)
+                {
+                    dataGridView1.FirstDisplayedScrollingRowIndex = row.Index;
+                    return;
+                }
             }
         }
 
         private void OnDataGridViewCellClick(object? sender, DataGridViewCellEventArgs e)
         {
-            int col = e.ColumnIndex;
-            int row = e.RowIndex;
-
-            if (row < 0 || col < 0)
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || pk1 == null || pk2 == null)
                 return;
-            if (pk1 == null || pk2 == null)
-            {
-                return;
-            }
-            if (col != op1.Index && col != op2.Index)
-                return;
-            if (dataGridView1.Rows[row].Cells[col] is not DataGridViewButtonCell)
+            bool toRight = e.ColumnIndex == op1.Index;
+            if (!toRight && e.ColumnIndex != op2.Index)
                 return;
 
-            string prop = dataGridView1.Rows[row].Cells[key.Index].Value?.ToString() ?? "";
-            if (!EntityBatchEditor.Instance.TryGetHasProperty(pk1, prop, out var pi1) ||
-                !EntityBatchEditor.Instance.TryGetHasProperty(pk2, prop, out var pi2))
-            {
+            var row = dataGridView1.Rows[e.RowIndex];
+            if (row.Cells[e.ColumnIndex] is not DataGridViewButtonCell)
                 return;
-            }
+            if (row.Tag is not RowInfo { Pi1: { } pi1, Pi2: { } pi2 } info)
+                return;
 
             try
             {
-                if (col == op1.Index)
+                if (toRight)
                     pi2.SetValue(pk2, CloneValue(pi1.GetValue(pk1)));
                 else
                     pi1.SetValue(pk1, CloneValue(pi2.GetValue(pk2)));
-                UpdateList();
             }
             catch (Exception ex)
             {
                 var msg = (ex as TargetInvocationException)?.InnerException?.Message ?? ex.Message;
-                MessageBox.Show($"Failed to copy \"{prop}\": {msg}", Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Failed to copy \"{info.Key}\": {msg}", Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
             }
+
+            // Deferred: refreshing replaces the clicked button cell, which must not happen inside its own click event.
+            BeginInvoke(() =>
+            {
+                RefreshRows();
+                if (toRight)
+                    UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: false);
+                else
+                    UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: false);
+            });
+        }
+
+        private void OnColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+        {
+            var column = dataGridView1.Columns[e.ColumnIndex];
+            if (column != op1 && column != op2)
+                return;
+
+            sortDirection = sortColumn == column && sortDirection == ListSortDirection.Ascending
+                ? ListSortDirection.Descending
+                : ListSortDirection.Ascending;
+            sortColumn = column;
+            ApplySort();
+        }
+
+        private void OnSorted(object? sender, EventArgs e)
+        {
+            // A built-in sort on Key/Value replaces the custom Op sort.
+            if (dataGridView1.SortedColumn is not { } column)
+                return;
+            sortColumn = column;
+            sortDirection = dataGridView1.SortOrder == SortOrder.Descending ? ListSortDirection.Descending : ListSortDirection.Ascending;
+            op1.HeaderCell.SortGlyphDirection = SortOrder.None;
+            op2.HeaderCell.SortGlyphDirection = SortOrder.None;
+        }
+
+        private void ApplySort()
+        {
+            if (sortColumn == null || dataGridView1.Rows.Count == 0)
+                return;
+
+            if (sortColumn != op1 && sortColumn != op2)
+            {
+                dataGridView1.Sort(sortColumn, sortDirection);
+                return;
+            }
+
+            dataGridView1.Sort(new StateComparer(sortDirection));
+            foreach (DataGridViewColumn column in dataGridView1.Columns)
+                column.HeaderCell.SortGlyphDirection = SortOrder.None;
+            sortColumn.HeaderCell.SortGlyphDirection = sortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
+        }
+
+        private static void UpdateHeader(PictureBox pb, TextBox tb, PKM pk, bool fromEditor)
+        {
+            tb.Text = $"\"{pk.Nickname}\"";
+
+            // The editor preview only matches pk when pk was just taken from the editor.
+            var img = PKMSprite.Render(pk) ?? (fromEditor ? PKMSprite.CopyEditorPreview() : null);
+            if (img == null && !fromEditor)
+                return;
+            var old = pb.Image;
+            pb.Image = img;
+            old?.Dispose();
         }
 
         // Avoid sharing array instances between the two entities.
@@ -140,14 +312,14 @@ namespace PKMMerge
         private void B_Import1_Click(object sender, EventArgs e)
         {
             pk1 = edit.PreparePKM();
-            TB_PKM1_Name.Text = $"\"{pk1.Nickname}\"";
+            UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: true);
             UpdateList();
         }
 
         private void B_Import2_Click(object sender, EventArgs e)
         {
             pk2 = edit.PreparePKM();
-            TB_PKM2_Name.Text = $"\"{pk2.Nickname}\"";
+            UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: true);
             UpdateList();
         }
 
