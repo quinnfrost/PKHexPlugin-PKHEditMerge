@@ -9,37 +9,29 @@ public class PKMMerge : IPlugin
     public string Name => nameof(PKMMerge);
     public int Priority => 1; // Loading order, lowest is first.
 
-    // Initialized on plugin load
     public ISaveFileProvider SaveFileEditor { get; private set; } = null!;
     public IPKMView PKMEditor { get; private set; } = null!;
 
-    public FormDiff? formDiff;
+    private FormDiff? formDiff;
 
     public void Initialize(params object[] args)
     {
-        Console.WriteLine($"Loading {Name}...");
         SaveFileEditor = (ISaveFileProvider)Array.Find(args, z => z is ISaveFileProvider)!;
         PKMEditor = (IPKMView)Array.Find(args, z => z is IPKMView)!;
-        
+
         var menu = (ToolStrip)Array.Find(args, z => z is ToolStrip)!;
         PKMSprite.Host = menu;
-        LoadMenuStrip(menu);
+        AddMenuItem(menu);
     }
 
-    private void LoadMenuStrip(ToolStrip menuStrip)
+    private void AddMenuItem(ToolStrip menuStrip)
     {
-        var items = menuStrip.Items;
-        if (items.Find("Menu_Tools", false)[0] is not ToolStripDropDownItem tools)
-            throw new ArgumentException(nameof(menuStrip));
-        AddPluginControl(tools);
-    }
+        if (menuStrip.Items.Find("Menu_Tools", false) is not [ToolStripDropDownItem tools, ..])
+            throw new ArgumentException("PKHeX menu strip has no Tools menu.", nameof(menuStrip));
 
-    private void AddPluginControl(ToolStripDropDownItem tools)
-    {
-        var ctrl = new ToolStripMenuItem(Name);
-        ctrl.Click += (_, _) => ShowDiffForm();
-        tools.DropDownItems.Add(ctrl);
-        Console.WriteLine($"{Name} added menu items.");
+        var item = new ToolStripMenuItem(Name);
+        item.Click += (_, _) => ShowDiffForm();
+        tools.DropDownItems.Add(item);
     }
 
     private void ShowDiffForm()
@@ -56,14 +48,13 @@ public class PKMMerge : IPlugin
         formDiff.Activate();
     }
 
-    public void NotifySaveLoaded()
+    public void NotifyDisplayLanguageChanged(string language)
     {
-        Console.WriteLine($"{Name} was notified that a Save File was just loaded.");
+        if (formDiff is { IsDisposed: false } form)
+            form.RefreshNames();
     }
 
-    public bool TryLoadFile(string filePath)
-    {
-        Console.WriteLine($"{Name} was provided with the file path, but chose to do nothing with it.");
-        return false; // no action taken
-    }
+    public void NotifySaveLoaded() { }
+
+    public bool TryLoadFile(string filePath) => false;
 }

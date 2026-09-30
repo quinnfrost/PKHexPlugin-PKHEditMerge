@@ -2,9 +2,13 @@ using PKHeX.Core;
 using System;
 using System.Collections;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace PKMMerge
@@ -50,14 +54,20 @@ namespace PKMMerge
 
         private readonly IPKMView edit;
         private readonly ISaveFileProvider saveProvider;
-        public PKM? pk1;
-        public PKM? pk2;
+        private PKM? pk1;
+        private PKM? pk2;
 
         private DataGridViewColumn? sortColumn;
         private ListSortDirection sortDirection;
 
         private Rectangle dragBox = Rectangle.Empty;
         private int dragSourceSide;
+
+        private sealed record HeaderIds(GroupBox Box, Label Chk, Label Pid, Label Ec);
+
+        private readonly Font monoFont;
+        private readonly HeaderIds ids1;
+        private readonly HeaderIds ids2;
 
         public FormDiff(IPKMView edit, ISaveFileProvider saveProvider)
         {
@@ -77,8 +87,22 @@ namespace PKMMerge
 
             this.edit = edit;
             this.saveProvider = saveProvider;
+
+            monoFont = new Font(FontFamily.GenericMonospace, Font.Size);
+            Disposed += (_, _) => monoFont.Dispose();
+            // Created before SetupDragDrop so the labels also accept drops.
+            ids1 = CreateHeaderIds(GB_PKM1);
+            ids2 = CreateHeaderIds(GB_PKM2);
+            GB_PKM1.SizeChanged += (_, _) => LayoutHeaderIds(ids1);
+            GB_PKM2.SizeChanged += (_, _) => LayoutHeaderIds(ids2);
+            pictureBox1.Paint += OnSpritePaint;
+            pictureBox2.Paint += OnSpritePaint;
+
             SetupDragDrop(GB_PKM1, pictureBox1, side: 1);
             SetupDragDrop(GB_PKM2, pictureBox2, side: 2);
+            // Deferred: the combo box applies its dropdown choice after this event, which would undo a revert done inside it.
+            CB_Format1.SelectionChangeCommitted += (_, _) => BeginInvoke(() => OnFormatChanged(CB_Format1, side: 1));
+            CB_Format2.SelectionChangeCommitted += (_, _) => BeginInvoke(() => OnFormatChanged(CB_Format2, side: 2));
         }
 
         /// <summary>Rebuilds all rows, applying the Hide filters and the current sort.</summary>
@@ -178,6 +202,12 @@ namespace PKMMerge
             SetValueCell(row.Cells[value1.Index], display1, info.CanEdit1);
             SetValueCell(row.Cells[value2.Index], display2, info.CanEdit2);
 
+            bool binary = (info.Pi1 != null && pk1 != null && PropertyValue.ReadBytes(info.Pi1, pk1) != null)
+                || (info.Pi2 != null && pk2 != null && PropertyValue.ReadBytes(info.Pi2, pk2) != null);
+            var keyCell = row.Cells[key.Index];
+            keyCell.ToolTipText = binary ? "Double-click to compare/edit as hex" : "";
+            keyCell.Style.ForeColor = binary ? SystemColors.HotTrack : Color.Empty;
+
             Color? color = info.State switch
             {
                 DiffState.Incomparable => IncomparableColor,
@@ -270,6 +300,7 @@ namespace PKMMerge
                     UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: false);
                 else
                     UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: false);
+                UpdateHeaderIds();
             });
         }
 
@@ -293,8 +324,44 @@ namespace PKMMerge
 
         private void OnCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
         {
+            if (e.ColumnIndex == key.Index)
+            {
+                TryOpenHexCompare(e.RowIndex);
+                return;
+            }
             if (TryGetEditTarget(e.RowIndex, e.ColumnIndex, out _, out _, out _))
                 dataGridView1.BeginEdit(selectAll: true);
+        }
+
+        /// <summary>Opens the side-by-side hex view for a binary (Span or byte[]) row.</summary>
+        private void TryOpenHexCompare(int rowIndex)
+        {
+            if (rowIndex < 0 || dataGridView1.Rows[rowIndex].Tag is not RowInfo info)
+                return;
+
+            var left = info.Pi1 != null && pk1 != null ? PropertyValue.ReadBytes(info.Pi1, pk1) : null;
+            var right = info.Pi2 != null && pk2 != null ? PropertyValue.ReadBytes(info.Pi2, pk2) : null;
+            if (left == null && right == null)
+                return;
+
+            using var form = new HexCompareForm(info.Key, left, right, info.CanEdit1, info.CanEdit2, Font, Icon);
+            if (form.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            string? error = null;
+            if (form.Result1 is { } r1 && !PropertyValue.TryWriteBytes(info.Pi1!, pk1!, r1, out var e1))
+                error = $"PKM 1: {e1}";
+            if (form.Result2 is { } r2 && !PropertyValue.TryWriteBytes(info.Pi2!, pk2!, r2, out var e2))
+                error = error == null ? $"PKM 2: {e2}" : $"{error}{Environment.NewLine}PKM 2: {e2}";
+            if (error != null)
+                MessageBox.Show(error, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            RefreshRows();
+            if (form.Result1 != null && pk1 != null)
+                UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: false);
+            if (form.Result2 != null && pk2 != null)
+                UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: false);
+            UpdateHeaderIds();
         }
 
         private void OnGridKeyDown(object? sender, KeyEventArgs e)
@@ -345,6 +412,7 @@ namespace PKMMerge
                     UpdateHeader(pictureBox1, TB_PKM1_Name, pk1, fromEditor: false);
                 else if (!left && pk2 != null)
                     UpdateHeader(pictureBox2, TB_PKM2_Name, pk2, fromEditor: false);
+                UpdateHeaderIds();
             });
         }
 
@@ -389,9 +457,92 @@ namespace PKMMerge
             sortColumn.HeaderCell.SortGlyphDirection = sortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
         }
 
-        private static void UpdateHeader(PictureBox pb, TextBox tb, PKM pk, bool fromEditor)
+        private sealed record FormatItem(Type Type, string Text)
         {
-            tb.Text = $"\"{pk.Nickname}\"";
+            public override string ToString() => Text;
+        }
+
+        /// <summary>Species name in the current PKHeX display language, followed by the nickname if it has one.</summary>
+        private static string GetDisplayName(PKM pk)
+        {
+            var names = GameInfo.Strings.Species;
+            var species = pk.Species < names.Count ? names[pk.Species] : $"#{pk.Species}";
+            return pk.IsNicknamed && !string.IsNullOrEmpty(pk.Nickname) ? $"{species} \"{pk.Nickname}\"" : species;
+        }
+
+        /// <summary>Re-applies names after PKHeX switches display language.</summary>
+        public void RefreshNames()
+        {
+            if (pk1 != null)
+                TB_PKM1_Name.Text = GetDisplayName(pk1);
+            if (pk2 != null)
+                TB_PKM2_Name.Text = GetDisplayName(pk2);
+        }
+
+        // Programmatic selection doesn't raise SelectionChangeCommitted, so rebuilding here never triggers a conversion.
+        private static void PopulateFormats(ComboBox cb, PKM pk)
+        {
+            cb.BeginUpdate();
+            try
+            {
+                cb.Items.Clear();
+                foreach (var type in EntityBatchEditor.Instance.Types)
+                {
+                    var blank = EntityBlank.GetBlank(type);
+                    if (type != pk.GetType() && !EntityConverter.IsConvertibleToFormat(pk, blank.Format))
+                        continue;
+                    var item = new FormatItem(type, $"{type.Name} ({blank.Context})");
+                    cb.Items.Add(item);
+                    if (type == pk.GetType())
+                        cb.SelectedItem = item;
+                }
+                cb.Enabled = cb.Items.Count > 1;
+            }
+            finally
+            {
+                cb.EndUpdate();
+            }
+        }
+
+        private void OnFormatChanged(ComboBox cb, int side)
+        {
+            if (cb.SelectedItem is not FormatItem { Type: var dest })
+                return;
+            var pk = side == 1 ? pk1 : pk2;
+            if (pk == null || pk.GetType() == dest)
+                return;
+
+            PKM? converted;
+            EntityConverterResult result;
+            try
+            {
+                converted = EntityConverter.ConvertToType(pk, dest, out result);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Conversion failed: {ex.Message}", Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                PopulateFormats(cb, pk);
+                return;
+            }
+
+            if (converted == null)
+            {
+                MessageBox.Show(result.GetDisplayString(pk, dest), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                PopulateFormats(cb, pk);
+                return;
+            }
+            // Same as PKHeX's IsSilent, which is a C# 14 extension property this project (C# 12) can't call.
+            if (result is not (EntityConverterResult.None or EntityConverterResult.Success))
+                MessageBox.Show(result.GetDisplayString(pk, dest), Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            SetSide(side, converted, fromEditor: false);
+            UpdateList();
+        }
+
+        private void UpdateHeader(PictureBox pb, TextBox tb, PKM pk, bool fromEditor)
+        {
+            tb.Text = GetDisplayName(pk);
+            PopulateFormats(pb == pictureBox1 ? CB_Format1 : CB_Format2, pk);
 
             // The editor preview only matches pk when pk was just taken from the editor.
             var img = PKMSprite.Render(pk) ?? (fromEditor ? PKMSprite.CopyEditorPreview() : null);
@@ -414,7 +565,154 @@ namespace PKMMerge
                 pk2 = pk;
                 UpdateHeader(pictureBox2, TB_PKM2_Name, pk, fromEditor);
             }
+            UpdateHeaderIds();
         }
+
+        #region Header IDs (checksum / PID / EC)
+
+        private HeaderIds CreateHeaderIds(GroupBox box)
+        {
+            Label Make() => new()
+            {
+                AutoSize = true,
+                Font = monoFont,
+                Padding = new Padding(2, 0, 2, 0),
+                Margin = Padding.Empty,
+                Visible = false,
+            };
+
+            var ids = new HeaderIds(box, Make(), Make(), Make());
+            foreach (var label in new[] { ids.Chk, ids.Pid, ids.Ec })
+            {
+                box.Controls.Add(label);
+                label.BringToFront();
+            }
+            return ids;
+        }
+
+        /// <summary>Same checksum PKHeX's default file namer puts in the exported file name.</summary>
+        private static ushort GetFileNameChecksum(PKM pk) => pk switch
+        {
+            PK1 gb1 => gb1.GetSingleListChecksum(),
+            PK2 gb2 => gb2.GetSingleListChecksum(),
+            GBPKM gb => Checksums.CRC16_CCITT(gb.Data),
+            ISanityChecksum s => s.Checksum,
+            _ => Checksums.Add16(pk.Data[8..pk.SIZE_STORED]),
+        };
+
+        // Same-Pokémon (EC) indicators. Each can be switched off independently.
+        private const bool ShowEcLabelTint = true;
+        private const bool ShowSpriteBorder = true;
+        private const int SpriteBorderWidth = 3;
+
+        /// <summary>Current same-Pokémon result, or null when either side is empty.</summary>
+        private Color? ecMatchColor;
+
+        /// <summary>Refreshes both sides, since the EC colour depends on the other side too.</summary>
+        private void UpdateHeaderIds()
+        {
+            ApplyHeaderIds(ids1, pk1);
+            ApplyHeaderIds(ids2, pk2);
+
+            ecMatchColor = GetEcMatch(out var match);
+            foreach (var (ids, pk, sprite) in new[] { (ids1, pk1, pictureBox1), (ids2, pk2, pictureBox2) })
+            {
+                var tip = pk == null ? "" : $"EC: {pk.EncryptionConstant:X8}";
+                if (match.Length != 0)
+                    tip = $"{tip}{Environment.NewLine}{match}";
+
+                if (pk != null)
+                {
+                    if (ShowEcLabelTint)
+                        ApplyEcLabelTint(ids);
+                    toolTip1.SetToolTip(ids.Ec, tip);
+                }
+
+                if (ShowSpriteBorder)
+                {
+                    toolTip1.SetToolTip(sprite, match.Length != 0 ? $"{SpriteToolTip}{Environment.NewLine}{match}" : SpriteToolTip);
+                    sprite.Invalidate();
+                }
+            }
+        }
+
+        private const string SpriteToolTip = "Drop a PKM file or box slot here. Drag the sprite out to export.";
+
+        private Color? GetEcMatch(out string match)
+        {
+            match = "";
+            if (pk1 == null || pk2 == null)
+                return null;
+
+            uint ec1 = pk1.EncryptionConstant, ec2 = pk2.EncryptionConstant;
+            // EC 0 is a blank entity or Gen1/2 data, so it says nothing about identity.
+            if (ec1 == 0 || ec2 == 0)
+            {
+                match = "EC is 0: cannot tell whether they are the same Pokémon.";
+                return IncomparableColor;
+            }
+            if (ec1 == ec2)
+            {
+                match = "Same EC: likely the same Pokémon.";
+                return SameColor;
+            }
+            match = "Different EC: different Pokémon.";
+            return DiffColor;
+        }
+
+        private void ApplyEcLabelTint(HeaderIds ids)
+        {
+            ids.Ec.BackColor = ecMatchColor ?? ids.Box.BackColor;
+            ids.Ec.ForeColor = ecMatchColor.HasValue ? Color.Black : ids.Box.ForeColor;
+        }
+
+        // Drawn inside the sprite box; sprites are transparent PNGs, so the frame stays visible.
+        private void OnSpritePaint(object? sender, PaintEventArgs e)
+        {
+            if (!ShowSpriteBorder || ecMatchColor is not { } color || sender is not PictureBox pb)
+                return;
+            using var pen = new Pen(color, SpriteBorderWidth) { Alignment = PenAlignment.Inset };
+            e.Graphics.DrawRectangle(pen, 0, 0, pb.ClientSize.Width - 1, pb.ClientSize.Height - 1);
+        }
+
+        private void ApplyHeaderIds(HeaderIds ids, PKM? pk)
+        {
+            bool loaded = pk != null;
+            ids.Chk.Visible = ids.Pid.Visible = ids.Ec.Visible = loaded;
+            if (pk == null)
+                return;
+
+            ids.Chk.Text = $"{GetFileNameChecksum(pk):X4}";
+            ids.Pid.Text = $"{pk.PID:X8}";
+            ids.Ec.Text = $"{pk.EncryptionConstant:X8}";
+            toolTip1.SetToolTip(ids.Chk, $"chk: {ids.Chk.Text}");
+            toolTip1.SetToolTip(ids.Pid, $"PID: {ids.Pid.Text}");
+            foreach (var label in new[] { ids.Chk, ids.Pid, ids.Ec })
+            {
+                label.BackColor = ids.Box.BackColor;
+                label.ForeColor = ids.Box.ForeColor;
+            }
+            LayoutHeaderIds(ids);
+        }
+
+        // Each label covers only its own stretch of the top border, so the line stays visible between them.
+        private static void LayoutHeaderIds(HeaderIds ids)
+        {
+            if (!ids.Chk.Visible)
+                return;
+
+            const int gap = 10;
+            var titleWidth = TextRenderer.MeasureText(ids.Box.Text, ids.Box.Font).Width;
+            int x = 8 + titleWidth + gap;
+            int lineY = ids.Box.Font.Height / 2;
+            foreach (var label in new[] { ids.Chk, ids.Pid, ids.Ec })
+            {
+                label.Location = new Point(x, Math.Max(0, lineY - (label.Height / 2)));
+                x += label.Width + gap;
+            }
+        }
+
+        #endregion
 
         #region Drag & Drop
 
@@ -465,7 +763,7 @@ namespace PKMMerge
             {
                 if (!TryLoadFile(files[i], out var pk, out var error))
                 {
-                    MessageBox.Show($"Unable to load \"{System.IO.Path.GetFileName(files[i])}\": {error}", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show($"Unable to load \"{Path.GetFileName(files[i])}\": {error}", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     continue;
                 }
                 SetSide(sides[i], pk, fromEditor: false);
@@ -473,7 +771,7 @@ namespace PKMMerge
             UpdateList();
         }
 
-        private bool TryLoadFile(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PKM? pk, out string error)
+        private bool TryLoadFile(string path, [NotNullWhen(true)] out PKM? pk, out string error)
         {
             pk = null;
             try
@@ -512,7 +810,7 @@ namespace PKMMerge
                 pk.WriteDecryptedDataParty(data);
 
                 file = FileUtil.GetPKMTempFileName(pk, encrypt: false);
-                System.IO.File.WriteAllBytes(file, data);
+                File.WriteAllBytes(file, data);
                 sprite.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { file }), DragDropEffects.Copy);
             }
             catch (Exception ex)
@@ -527,11 +825,11 @@ namespace PKMMerge
             }
         }
 
-        private static async System.Threading.Tasks.Task DeleteLaterAsync(string file)
+        private static async Task DeleteLaterAsync(string file)
         {
-            await System.Threading.Tasks.Task.Delay(TempFileLifetime).ConfigureAwait(false);
-            try { System.IO.File.Delete(file); }
-            catch (System.IO.IOException) { }
+            await Task.Delay(TempFileLifetime).ConfigureAwait(false);
+            try { File.Delete(file); }
+            catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
 

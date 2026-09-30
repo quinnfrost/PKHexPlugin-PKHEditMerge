@@ -63,6 +63,30 @@ internal readonly record struct PropertyValue(string Display, bool IsComparable)
         return IsWritable(dst);
     }
 
+    /// <summary>Raw bytes of a Span or byte[] property, or null if the property is not binary.</summary>
+    public static byte[]? ReadBytes(PropertyInfo pi, PKM pk)
+    {
+        if (!pi.CanRead || pi.GetIndexParameters().Length != 0)
+            return null;
+        if (pi.PropertyType.IsByRefLike)
+            return GetSpanAccessor(pi)?.Read(pk);
+        if (pi.PropertyType != typeof(byte[]))
+            return null;
+        try { return (pi.GetValue(pk) as byte[])?.ToArray(); }
+        catch (TargetInvocationException) { return null; }
+    }
+
+    /// <summary>Writes same-length raw bytes back to a Span or byte[] property.</summary>
+    public static bool TryWriteBytes(PropertyInfo pi, PKM pk, byte[] data, out string error)
+    {
+        var current = ReadBytes(pi, pk);
+        if (current == null)
+            return Fail("This value is not binary.", out error);
+        if (current.Length != data.Length)
+            return Fail($"Expected {current.Length} bytes, got {data.Length}.", out error);
+        return TryWrite(pi, pk, Convert.ToHexString(data), out error);
+    }
+
     /// <summary>True if the property can be set from user-entered text.</summary>
     public static bool CanEdit(PropertyInfo pi)
     {

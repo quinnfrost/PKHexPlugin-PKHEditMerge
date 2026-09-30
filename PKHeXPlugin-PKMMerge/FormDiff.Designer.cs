@@ -47,6 +47,8 @@ namespace PKMMerge
             B_Export2 = new System.Windows.Forms.Button();
             GB_PKM1 = new System.Windows.Forms.GroupBox();
             GB_PKM2 = new System.Windows.Forms.GroupBox();
+            CB_Format1 = new System.Windows.Forms.ComboBox();
+            CB_Format2 = new System.Windows.Forms.ComboBox();
             toolTip1 = new System.Windows.Forms.ToolTip(components);
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
@@ -64,9 +66,9 @@ namespace PKMMerge
             dataGridView1.BackgroundColor = System.Drawing.SystemColors.Window;
             dataGridView1.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dataGridView1.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] { key, value1, op1, op2, value2 });
+            dataGridView1.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
             dataGridView1.Location = new System.Drawing.Point(8, 128);
             dataGridView1.Margin = new System.Windows.Forms.Padding(2);
-            dataGridView1.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
             dataGridView1.Name = "dataGridView1";
             dataGridView1.RowHeadersVisible = false;
             dataGridView1.RowHeadersWidth = 62;
@@ -116,7 +118,7 @@ namespace PKMMerge
             value2.HeaderText = "Value2";
             value2.MinimumWidth = 100;
             value2.Name = "value2";
-            value2.ReadOnly = true;
+            // 
             // CB_HideSame
             // 
             CB_HideSame.Anchor = System.Windows.Forms.AnchorStyles.Top;
@@ -145,6 +147,7 @@ namespace PKMMerge
             // 
             GB_PKM1.Controls.Add(pictureBox1);
             GB_PKM1.Controls.Add(TB_PKM1_Name);
+            GB_PKM1.Controls.Add(CB_Format1);
             GB_PKM1.Controls.Add(B_Import1);
             GB_PKM1.Controls.Add(B_Export1);
             GB_PKM1.Location = new System.Drawing.Point(8, 8);
@@ -159,36 +162,45 @@ namespace PKMMerge
             pictureBox1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             pictureBox1.Location = new System.Drawing.Point(12, 24);
             pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new System.Drawing.Size(80, 76);
+            pictureBox1.Size = new System.Drawing.Size(80, 80);
             pictureBox1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
             // 
             // TB_PKM1_Name
             // 
-            TB_PKM1_Name.Location = new System.Drawing.Point(104, 24);
+            TB_PKM1_Name.Location = new System.Drawing.Point(104, 22);
             TB_PKM1_Name.Name = "TB_PKM1_Name";
             TB_PKM1_Name.ReadOnly = true;
             TB_PKM1_Name.Size = new System.Drawing.Size(174, 23);
             TB_PKM1_Name.TabIndex = 1;
             TB_PKM1_Name.TabStop = false;
             // 
+            // CB_Format1
+            // 
+            CB_Format1.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            CB_Format1.Enabled = false;
+            CB_Format1.Location = new System.Drawing.Point(104, 50);
+            CB_Format1.Name = "CB_Format1";
+            CB_Format1.Size = new System.Drawing.Size(174, 25);
+            CB_Format1.TabIndex = 2;
+            // 
             // B_Import1
             // 
-            B_Import1.Location = new System.Drawing.Point(104, 72);
+            B_Import1.Location = new System.Drawing.Point(104, 80);
             B_Import1.Name = "B_Import1";
-            B_Import1.Size = new System.Drawing.Size(84, 28);
-            B_Import1.TabIndex = 2;
+            B_Import1.Size = new System.Drawing.Size(84, 26);
+            B_Import1.TabIndex = 3;
             B_Import1.Text = "Import";
             B_Import1.UseVisualStyleBackColor = true;
             B_Import1.Click += B_Import1_Click;
             // 
             // B_Export1
             // 
-            B_Export1.Location = new System.Drawing.Point(194, 72);
+            B_Export1.Location = new System.Drawing.Point(194, 80);
             B_Export1.Name = "B_Export1";
-            B_Export1.Size = new System.Drawing.Size(84, 28);
-            B_Export1.TabIndex = 3;
+            B_Export1.Size = new System.Drawing.Size(84, 26);
+            B_Export1.TabIndex = 4;
             B_Export1.Text = "Export";
             B_Export1.UseVisualStyleBackColor = true;
             B_Export1.Click += B_Export1_Click;
@@ -197,6 +209,7 @@ namespace PKMMerge
             // 
             GB_PKM2.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
             GB_PKM2.Controls.Add(TB_PKM2_Name);
+            GB_PKM2.Controls.Add(CB_Format2);
             GB_PKM2.Controls.Add(B_Import2);
             GB_PKM2.Controls.Add(B_Export2);
             GB_PKM2.Controls.Add(pictureBox2);
@@ -209,29 +222,38 @@ namespace PKMMerge
             // 
             // TB_PKM2_Name
             // 
-            TB_PKM2_Name.Location = new System.Drawing.Point(12, 24);
+            TB_PKM2_Name.Location = new System.Drawing.Point(12, 22);
             TB_PKM2_Name.Name = "TB_PKM2_Name";
             TB_PKM2_Name.ReadOnly = true;
             TB_PKM2_Name.Size = new System.Drawing.Size(174, 23);
             TB_PKM2_Name.TabIndex = 0;
             TB_PKM2_Name.TabStop = false;
             // 
+            // CB_Format2
+            // 
+            CB_Format2.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            CB_Format2.Enabled = false;
+            CB_Format2.Location = new System.Drawing.Point(12, 50);
+            CB_Format2.Name = "CB_Format2";
+            CB_Format2.Size = new System.Drawing.Size(174, 25);
+            CB_Format2.TabIndex = 1;
+            // 
             // B_Import2
             // 
-            B_Import2.Location = new System.Drawing.Point(12, 72);
+            B_Import2.Location = new System.Drawing.Point(12, 80);
             B_Import2.Name = "B_Import2";
-            B_Import2.Size = new System.Drawing.Size(84, 28);
-            B_Import2.TabIndex = 1;
+            B_Import2.Size = new System.Drawing.Size(84, 26);
+            B_Import2.TabIndex = 2;
             B_Import2.Text = "Import";
             B_Import2.UseVisualStyleBackColor = true;
             B_Import2.Click += B_Import2_Click;
             // 
             // B_Export2
             // 
-            B_Export2.Location = new System.Drawing.Point(102, 72);
+            B_Export2.Location = new System.Drawing.Point(102, 80);
             B_Export2.Name = "B_Export2";
-            B_Export2.Size = new System.Drawing.Size(84, 28);
-            B_Export2.TabIndex = 2;
+            B_Export2.Size = new System.Drawing.Size(84, 26);
+            B_Export2.TabIndex = 3;
             B_Export2.Text = "Export";
             B_Export2.UseVisualStyleBackColor = true;
             B_Export2.Click += B_Export2_Click;
@@ -241,9 +263,9 @@ namespace PKMMerge
             pictureBox2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             pictureBox2.Location = new System.Drawing.Point(198, 24);
             pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new System.Drawing.Size(80, 76);
+            pictureBox2.Size = new System.Drawing.Size(80, 80);
             pictureBox2.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
-            pictureBox2.TabIndex = 3;
+            pictureBox2.TabIndex = 4;
             pictureBox2.TabStop = false;
             // 
             // toolTip1
@@ -252,6 +274,8 @@ namespace PKMMerge
             toolTip1.SetToolTip(pictureBox1, "Drop a PKM file or box slot here. Drag the sprite out to export.");
             toolTip1.SetToolTip(GB_PKM2, "Drop a PKM file or box slot here. Drag the sprite out to export.");
             toolTip1.SetToolTip(pictureBox2, "Drop a PKM file or box slot here. Drag the sprite out to export.");
+            toolTip1.SetToolTip(CB_Format1, "Format of this PKM. Choose another to convert it.");
+            toolTip1.SetToolTip(CB_Format2, "Format of this PKM. Choose another to convert it.");
             // 
             // FormDiff
             // 
@@ -298,6 +322,8 @@ namespace PKMMerge
         private System.Windows.Forms.Button B_Export2;
         private System.Windows.Forms.GroupBox GB_PKM1;
         private System.Windows.Forms.GroupBox GB_PKM2;
+        private System.Windows.Forms.ComboBox CB_Format1;
+        private System.Windows.Forms.ComboBox CB_Format2;
         private System.Windows.Forms.ToolTip toolTip1;
     }
 }
