@@ -20,6 +20,9 @@
     <Compile Update="HexCompareForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="PKHEditor.cs">
+      <SubType>Form</SubType>
+    </Compile>
   </ItemGroup>
 
   <PropertyGroup>

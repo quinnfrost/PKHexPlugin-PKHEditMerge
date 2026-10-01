@@ -1,0 +1,481 @@
+namespace PKMMerge
+{
+    partial class PKHEditor
+    {
+        /// <summary>
+        /// Required designer variable.
+        /// </summary>
+        private System.ComponentModel.IContainer components = null;
+
+        /// <summary>
+        /// Clean up any resources being used.
+        /// </summary>
+        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && (components != null))
+            {
+                components.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        #region Windows Form Designer generated code
+
+        /// <summary>
+        /// Required method for Designer support - do not modify
+        /// the contents of this method with the code editor.
+        /// </summary>
+        private void InitializeComponent()
+        {
+            components = new System.ComponentModel.Container();
+            GB_Main = new System.Windows.Forms.GroupBox();
+            PB_Sprite = new System.Windows.Forms.PictureBox();
+            TB_Name = new System.Windows.Forms.TextBox();
+            L_Tracker = new System.Windows.Forms.Label();
+            TB_Tracker = new System.Windows.Forms.TextBox();
+            B_NewTracker = new System.Windows.Forms.Button();
+            L_Ids = new System.Windows.Forms.Label();
+            TC_Info = new System.Windows.Forms.TabControl();
+            Tab_Main = new System.Windows.Forms.TabPage();
+            TLP_Main = new System.Windows.Forms.TableLayoutPanel();
+            L_Nickname = new System.Windows.Forms.Label();
+            TB_Nickname = new System.Windows.Forms.TextBox();
+            L_EXP = new System.Windows.Forms.Label();
+            NUD_EXP = new System.Windows.Forms.NumericUpDown();
+            L_Level = new System.Windows.Forms.Label();
+            L_LevelValue = new System.Windows.Forms.Label();
+            L_Nature = new System.Windows.Forms.Label();
+            CB_Nature = new System.Windows.Forms.ComboBox();
+            L_Friendship = new System.Windows.Forms.Label();
+            NUD_Friendship = new System.Windows.Forms.NumericUpDown();
+            Tab_Trainer = new System.Windows.Forms.TabPage();
+            TB_Trainer = new System.Windows.Forms.TextBox();
+            Tab_Other = new System.Windows.Forms.TabPage();
+            TB_Other = new System.Windows.Forms.TextBox();
+            GB_Versions = new System.Windows.Forms.GroupBox();
+            FLP_Versions = new System.Windows.Forms.FlowLayoutPanel();
+            FLP_Create = new System.Windows.Forms.FlowLayoutPanel();
+            CB_CreateFormat = new System.Windows.Forms.ComboBox();
+            B_CreateVersion = new System.Windows.Forms.Button();
+            GB_VersionInfo = new System.Windows.Forms.GroupBox();
+            TB_VersionInfo = new System.Windows.Forms.TextBox();
+            L_Status = new System.Windows.Forms.Label();
+            toolTip1 = new System.Windows.Forms.ToolTip(components);
+            GB_Main.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)PB_Sprite).BeginInit();
+            TC_Info.SuspendLayout();
+            Tab_Main.SuspendLayout();
+            TLP_Main.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)NUD_EXP).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)NUD_Friendship).BeginInit();
+            Tab_Trainer.SuspendLayout();
+            Tab_Other.SuspendLayout();
+            GB_Versions.SuspendLayout();
+            GB_VersionInfo.SuspendLayout();
+            SuspendLayout();
+            // 
+            // GB_Main
+            // 
+            GB_Main.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            GB_Main.Controls.Add(PB_Sprite);
+            GB_Main.Controls.Add(TB_Name);
+            GB_Main.Controls.Add(L_Tracker);
+            GB_Main.Controls.Add(TB_Tracker);
+            GB_Main.Controls.Add(B_NewTracker);
+            GB_Main.Controls.Add(L_Ids);
+            GB_Main.Controls.Add(TC_Info);
+            GB_Main.Location = new System.Drawing.Point(8, 8);
+            GB_Main.Name = "GB_Main";
+            GB_Main.Size = new System.Drawing.Size(500, 424);
+            GB_Main.TabIndex = 0;
+            GB_Main.TabStop = false;
+            GB_Main.Text = "PKH";
+            // 
+            // PB_Sprite
+            // 
+            PB_Sprite.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            PB_Sprite.Location = new System.Drawing.Point(12, 24);
+            PB_Sprite.Name = "PB_Sprite";
+            PB_Sprite.Size = new System.Drawing.Size(80, 80);
+            PB_Sprite.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            PB_Sprite.TabIndex = 0;
+            PB_Sprite.TabStop = false;
+            // 
+            // TB_Name
+            // 
+            TB_Name.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            TB_Name.Location = new System.Drawing.Point(104, 24);
+            TB_Name.Name = "TB_Name";
+            TB_Name.ReadOnly = true;
+            TB_Name.Size = new System.Drawing.Size(344, 23);
+            TB_Name.TabIndex = 1;
+            TB_Name.TabStop = false;
+            // 
+            // L_Tracker
+            // 
+            L_Tracker.AutoSize = true;
+            L_Tracker.Location = new System.Drawing.Point(104, 56);
+            L_Tracker.Name = "L_Tracker";
+            L_Tracker.Size = new System.Drawing.Size(97, 17);
+            L_Tracker.TabIndex = 2;
+            L_Tracker.Text = "HOME Tracker:";
+            // 
+            // TB_Tracker
+            // 
+            TB_Tracker.Font = new System.Drawing.Font("Courier New", 9F);
+            TB_Tracker.Location = new System.Drawing.Point(207, 53);
+            TB_Tracker.MaxLength = 16;
+            TB_Tracker.Name = "TB_Tracker";
+            TB_Tracker.Size = new System.Drawing.Size(150, 21);
+            TB_Tracker.TabIndex = 3;
+            TB_Tracker.Validated += TB_Tracker_Validated;
+            // 
+            // B_NewTracker
+            // 
+            B_NewTracker.Location = new System.Drawing.Point(366, 51);
+            B_NewTracker.Name = "B_NewTracker";
+            B_NewTracker.Size = new System.Drawing.Size(86, 26);
+            B_NewTracker.TabIndex = 4;
+            B_NewTracker.Text = "Generate";
+            B_NewTracker.UseVisualStyleBackColor = true;
+            B_NewTracker.Click += B_NewTracker_Click;
+            // 
+            // L_Ids
+            // 
+            L_Ids.AutoSize = true;
+            L_Ids.Font = new System.Drawing.Font("Courier New", 9F);
+            L_Ids.Location = new System.Drawing.Point(104, 88);
+            L_Ids.Name = "L_Ids";
+            L_Ids.Size = new System.Drawing.Size(0, 15);
+            L_Ids.TabIndex = 5;
+            // 
+            // TC_Info
+            // 
+            TC_Info.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            TC_Info.Controls.Add(Tab_Main);
+            TC_Info.Controls.Add(Tab_Trainer);
+            TC_Info.Controls.Add(Tab_Other);
+            TC_Info.Location = new System.Drawing.Point(12, 116);
+            TC_Info.Name = "TC_Info";
+            TC_Info.SelectedIndex = 0;
+            TC_Info.Size = new System.Drawing.Size(476, 296);
+            TC_Info.TabIndex = 6;
+            // 
+            // Tab_Main
+            // 
+            Tab_Main.Controls.Add(TLP_Main);
+            Tab_Main.Location = new System.Drawing.Point(4, 26);
+            Tab_Main.Name = "Tab_Main";
+            Tab_Main.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Main.Size = new System.Drawing.Size(468, 266);
+            Tab_Main.TabIndex = 0;
+            Tab_Main.Text = "Main";
+            Tab_Main.UseVisualStyleBackColor = true;
+            // 
+            // TLP_Main
+            // 
+            TLP_Main.ColumnCount = 2;
+            TLP_Main.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
+            TLP_Main.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            TLP_Main.Controls.Add(L_Nickname, 0, 0);
+            TLP_Main.Controls.Add(TB_Nickname, 1, 0);
+            TLP_Main.Controls.Add(L_EXP, 0, 1);
+            TLP_Main.Controls.Add(NUD_EXP, 1, 1);
+            TLP_Main.Controls.Add(L_Level, 0, 2);
+            TLP_Main.Controls.Add(L_LevelValue, 1, 2);
+            TLP_Main.Controls.Add(L_Nature, 0, 3);
+            TLP_Main.Controls.Add(CB_Nature, 1, 3);
+            TLP_Main.Controls.Add(L_Friendship, 0, 4);
+            TLP_Main.Controls.Add(NUD_Friendship, 1, 4);
+            TLP_Main.Dock = System.Windows.Forms.DockStyle.Fill;
+            TLP_Main.Location = new System.Drawing.Point(6, 6);
+            TLP_Main.Name = "TLP_Main";
+            TLP_Main.RowCount = 6;
+            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
+            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
+            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
+            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
+            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
+            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            TLP_Main.Size = new System.Drawing.Size(416, 258);
+            TLP_Main.TabIndex = 0;
+            // 
+            // L_Nickname
+            // 
+            L_Nickname.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_Nickname.AutoSize = true;
+            L_Nickname.Name = "L_Nickname";
+            L_Nickname.TabIndex = 0;
+            L_Nickname.Text = "Nickname:";
+            // 
+            // TB_Nickname
+            // 
+            TB_Nickname.Anchor = System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            TB_Nickname.MaxLength = 12;
+            TB_Nickname.Name = "TB_Nickname";
+            TB_Nickname.TabIndex = 1;
+            TB_Nickname.Validated += TB_Nickname_Validated;
+            // 
+            // L_EXP
+            // 
+            L_EXP.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_EXP.AutoSize = true;
+            L_EXP.Name = "L_EXP";
+            L_EXP.TabIndex = 2;
+            L_EXP.Text = "EXP:";
+            // 
+            // NUD_EXP
+            // 
+            NUD_EXP.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            NUD_EXP.Maximum = new decimal(new int[] { 2000000, 0, 0, 0 });
+            NUD_EXP.Name = "NUD_EXP";
+            NUD_EXP.Size = new System.Drawing.Size(120, 23);
+            NUD_EXP.TabIndex = 3;
+            NUD_EXP.ValueChanged += NUD_EXP_ValueChanged;
+            // 
+            // L_Level
+            // 
+            L_Level.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_Level.AutoSize = true;
+            L_Level.Name = "L_Level";
+            L_Level.TabIndex = 4;
+            L_Level.Text = "Level:";
+            // 
+            // L_LevelValue
+            // 
+            L_LevelValue.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_LevelValue.AutoSize = true;
+            L_LevelValue.Name = "L_LevelValue";
+            L_LevelValue.TabIndex = 5;
+            L_LevelValue.Text = "-";
+            // 
+            // L_Nature
+            // 
+            L_Nature.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_Nature.AutoSize = true;
+            L_Nature.Name = "L_Nature";
+            L_Nature.TabIndex = 6;
+            L_Nature.Text = "Nature:";
+            // 
+            // CB_Nature
+            // 
+            CB_Nature.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            CB_Nature.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            CB_Nature.Name = "CB_Nature";
+            CB_Nature.Size = new System.Drawing.Size(160, 25);
+            CB_Nature.TabIndex = 7;
+            CB_Nature.SelectionChangeCommitted += CB_Nature_SelectionChangeCommitted;
+            // 
+            // L_Friendship
+            // 
+            L_Friendship.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_Friendship.AutoSize = true;
+            L_Friendship.Name = "L_Friendship";
+            L_Friendship.TabIndex = 8;
+            L_Friendship.Text = "Friendship:";
+            // 
+            // NUD_Friendship
+            // 
+            NUD_Friendship.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            NUD_Friendship.Maximum = new decimal(new int[] { 255, 0, 0, 0 });
+            NUD_Friendship.Name = "NUD_Friendship";
+            NUD_Friendship.Size = new System.Drawing.Size(80, 23);
+            NUD_Friendship.TabIndex = 9;
+            NUD_Friendship.ValueChanged += NUD_Friendship_ValueChanged;
+            // 
+            // Tab_Trainer
+            // 
+            Tab_Trainer.Controls.Add(TB_Trainer);
+            Tab_Trainer.Location = new System.Drawing.Point(4, 26);
+            Tab_Trainer.Name = "Tab_Trainer";
+            Tab_Trainer.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Trainer.Size = new System.Drawing.Size(468, 266);
+            Tab_Trainer.TabIndex = 1;
+            Tab_Trainer.Text = "Trainer";
+            Tab_Trainer.UseVisualStyleBackColor = true;
+            // 
+            // TB_Trainer
+            // 
+            TB_Trainer.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_Trainer.Multiline = true;
+            TB_Trainer.Name = "TB_Trainer";
+            TB_Trainer.ReadOnly = true;
+            TB_Trainer.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_Trainer.TabIndex = 0;
+            TB_Trainer.TabStop = false;
+            // 
+            // Tab_Other
+            // 
+            Tab_Other.Controls.Add(TB_Other);
+            Tab_Other.Location = new System.Drawing.Point(4, 26);
+            Tab_Other.Name = "Tab_Other";
+            Tab_Other.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Other.Size = new System.Drawing.Size(468, 266);
+            Tab_Other.TabIndex = 2;
+            Tab_Other.Text = "Other";
+            Tab_Other.UseVisualStyleBackColor = true;
+            // 
+            // TB_Other
+            // 
+            TB_Other.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_Other.Multiline = true;
+            TB_Other.Name = "TB_Other";
+            TB_Other.ReadOnly = true;
+            TB_Other.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_Other.TabIndex = 0;
+            TB_Other.TabStop = false;
+            // 
+            // GB_Versions
+            // 
+            GB_Versions.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            GB_Versions.Controls.Add(FLP_Versions);
+            GB_Versions.Controls.Add(FLP_Create);
+            GB_Versions.Location = new System.Drawing.Point(516, 8);
+            GB_Versions.Name = "GB_Versions";
+            GB_Versions.Padding = new System.Windows.Forms.Padding(3, 18, 3, 3);
+            GB_Versions.Size = new System.Drawing.Size(136, 424);
+            GB_Versions.TabIndex = 1;
+            GB_Versions.TabStop = false;
+            GB_Versions.Text = "Versions";
+            // 
+            // FLP_Versions
+            // 
+            FLP_Versions.AutoScroll = true;
+            FLP_Versions.Dock = System.Windows.Forms.DockStyle.Fill;
+            FLP_Versions.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
+            FLP_Versions.Name = "FLP_Versions";
+            FLP_Versions.TabIndex = 0;
+            FLP_Versions.WrapContents = false;
+            // 
+            // FLP_Create
+            // 
+            FLP_Create.Controls.Add(CB_CreateFormat);
+            FLP_Create.Controls.Add(B_CreateVersion);
+            FLP_Create.Dock = System.Windows.Forms.DockStyle.Bottom;
+            FLP_Create.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
+            FLP_Create.Name = "FLP_Create";
+            FLP_Create.Padding = new System.Windows.Forms.Padding(0, 4, 0, 0);
+            FLP_Create.Size = new System.Drawing.Size(130, 70);
+            FLP_Create.TabIndex = 1;
+            FLP_Create.WrapContents = false;
+            // 
+            // CB_CreateFormat
+            // 
+            CB_CreateFormat.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            CB_CreateFormat.Name = "CB_CreateFormat";
+            CB_CreateFormat.Size = new System.Drawing.Size(120, 25);
+            CB_CreateFormat.TabIndex = 0;
+            // 
+            // B_CreateVersion
+            // 
+            B_CreateVersion.Name = "B_CreateVersion";
+            B_CreateVersion.Size = new System.Drawing.Size(120, 28);
+            B_CreateVersion.TabIndex = 1;
+            B_CreateVersion.Text = "Create version";
+            B_CreateVersion.UseVisualStyleBackColor = true;
+            B_CreateVersion.Click += B_CreateVersion_Click;
+            // 
+            // GB_VersionInfo
+            // 
+            GB_VersionInfo.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            GB_VersionInfo.Controls.Add(TB_VersionInfo);
+            GB_VersionInfo.Location = new System.Drawing.Point(660, 8);
+            GB_VersionInfo.Name = "GB_VersionInfo";
+            GB_VersionInfo.Size = new System.Drawing.Size(232, 424);
+            GB_VersionInfo.TabIndex = 2;
+            GB_VersionInfo.TabStop = false;
+            GB_VersionInfo.Text = "Version data";
+            // 
+            // TB_VersionInfo
+            // 
+            TB_VersionInfo.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_VersionInfo.Multiline = true;
+            TB_VersionInfo.Name = "TB_VersionInfo";
+            TB_VersionInfo.ReadOnly = true;
+            TB_VersionInfo.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_VersionInfo.TabIndex = 0;
+            TB_VersionInfo.TabStop = false;
+            // 
+            // L_Status
+            // 
+            L_Status.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            L_Status.AutoEllipsis = true;
+            L_Status.Location = new System.Drawing.Point(8, 440);
+            L_Status.Name = "L_Status";
+            L_Status.Size = new System.Drawing.Size(884, 50);
+            L_Status.TabIndex = 3;
+            L_Status.Text = "Drop a .pkh file to open it, or a PKM file to create or update a PKH. Drag the sprite out to export.";
+            L_Status.TextAlign = System.Drawing.ContentAlignment.TopLeft;
+            // 
+            // PKHEditor
+            // 
+            AllowDrop = true;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            ClientSize = new System.Drawing.Size(900, 500);
+            Controls.Add(GB_Main);
+            Controls.Add(GB_Versions);
+            Controls.Add(GB_VersionInfo);
+            Controls.Add(L_Status);
+            MinimumSize = new System.Drawing.Size(916, 440);
+            Name = "PKHEditor";
+            Text = "PKH Editor";
+            FormClosing += PKHEditor_FormClosing;
+            GB_Main.ResumeLayout(false);
+            GB_Main.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)PB_Sprite).EndInit();
+            TC_Info.ResumeLayout(false);
+            Tab_Main.ResumeLayout(false);
+            TLP_Main.ResumeLayout(false);
+            TLP_Main.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)NUD_EXP).EndInit();
+            ((System.ComponentModel.ISupportInitialize)NUD_Friendship).EndInit();
+            Tab_Trainer.ResumeLayout(false);
+            Tab_Trainer.PerformLayout();
+            Tab_Other.ResumeLayout(false);
+            Tab_Other.PerformLayout();
+            GB_Versions.ResumeLayout(false);
+            GB_VersionInfo.ResumeLayout(false);
+            GB_VersionInfo.PerformLayout();
+            ResumeLayout(false);
+            PerformLayout();
+        }
+
+        #endregion
+
+        private System.Windows.Forms.GroupBox GB_Main;
+        private System.Windows.Forms.PictureBox PB_Sprite;
+        private System.Windows.Forms.TextBox TB_Name;
+        private System.Windows.Forms.Label L_Tracker;
+        private System.Windows.Forms.TextBox TB_Tracker;
+        private System.Windows.Forms.Button B_NewTracker;
+        private System.Windows.Forms.Label L_Ids;
+        private System.Windows.Forms.TabControl TC_Info;
+        private System.Windows.Forms.TabPage Tab_Main;
+        private System.Windows.Forms.TableLayoutPanel TLP_Main;
+        private System.Windows.Forms.Label L_Nickname;
+        private System.Windows.Forms.TextBox TB_Nickname;
+        private System.Windows.Forms.Label L_EXP;
+        private System.Windows.Forms.NumericUpDown NUD_EXP;
+        private System.Windows.Forms.Label L_Level;
+        private System.Windows.Forms.Label L_LevelValue;
+        private System.Windows.Forms.Label L_Nature;
+        private System.Windows.Forms.ComboBox CB_Nature;
+        private System.Windows.Forms.Label L_Friendship;
+        private System.Windows.Forms.NumericUpDown NUD_Friendship;
+        private System.Windows.Forms.TabPage Tab_Trainer;
+        private System.Windows.Forms.TextBox TB_Trainer;
+        private System.Windows.Forms.TabPage Tab_Other;
+        private System.Windows.Forms.TextBox TB_Other;
+        private System.Windows.Forms.GroupBox GB_Versions;
+        private System.Windows.Forms.FlowLayoutPanel FLP_Versions;
+        private System.Windows.Forms.FlowLayoutPanel FLP_Create;
+        private System.Windows.Forms.ComboBox CB_CreateFormat;
+        private System.Windows.Forms.Button B_CreateVersion;
+        private System.Windows.Forms.GroupBox GB_VersionInfo;
+        private System.Windows.Forms.TextBox TB_VersionInfo;
+        private System.Windows.Forms.Label L_Status;
+        private System.Windows.Forms.ToolTip toolTip1;
+    }
+}

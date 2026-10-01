@@ -49,9 +49,6 @@ namespace PKMMerge
         private static readonly Color DiffColor = Color.LightCoral;
         private static readonly Color IncomparableColor = Color.LightGray;
 
-        // PKHeX deletes its own drag-out temp files after a similar delay, giving the drop target time to read them.
-        private static readonly TimeSpan TempFileLifetime = TimeSpan.FromSeconds(20);
-
         private readonly IPKMView edit;
         private readonly ISaveFileProvider saveProvider;
         private PKM? pk1;
@@ -462,13 +459,7 @@ namespace PKMMerge
             public override string ToString() => Text;
         }
 
-        /// <summary>Species name in the current PKHeX display language, followed by the nickname if it has one.</summary>
-        private static string GetDisplayName(PKM pk)
-        {
-            var names = GameInfo.Strings.Species;
-            var species = pk.Species < names.Count ? names[pk.Species] : $"#{pk.Species}";
-            return pk.IsNicknamed && !string.IsNullOrEmpty(pk.Nickname) ? $"{species} \"{pk.Nickname}\"" : species;
-        }
+        private static string GetDisplayName(PKM pk) => PkmUtil.GetDisplayName(pk);
 
         /// <summary>Re-applies names after PKHeX switches display language.</summary>
         public void RefreshNames()
@@ -590,15 +581,7 @@ namespace PKMMerge
             return ids;
         }
 
-        /// <summary>Same checksum PKHeX's default file namer puts in the exported file name.</summary>
-        private static ushort GetFileNameChecksum(PKM pk) => pk switch
-        {
-            PK1 gb1 => gb1.GetSingleListChecksum(),
-            PK2 gb2 => gb2.GetSingleListChecksum(),
-            GBPKM gb => Checksums.CRC16_CCITT(gb.Data),
-            ISanityChecksum s => s.Checksum,
-            _ => Checksums.Add16(pk.Data[8..pk.SIZE_STORED]),
-        };
+        private static ushort GetFileNameChecksum(PKM pk) => PkmUtil.GetFileNameChecksum(pk);
 
         // Same-Pokémon (EC) indicators. Each can be switched off independently.
         private const bool ShowEcLabelTint = true;
@@ -772,65 +755,16 @@ namespace PKMMerge
         }
 
         private bool TryLoadFile(string path, [NotNullWhen(true)] out PKM? pk, out string error)
-        {
-            pk = null;
-            try
-            {
-                var sav = saveProvider.SAV;
-                pk = FileUtil.GetSupportedFile(path, sav) switch
-                {
-                    PKM p => p,
-                    MysteryGift g => g.ConvertToPKM(sav),
-                    IEncounterConvertible enc => enc.ConvertToPKM(sav),
-                    _ => null,
-                };
-                error = pk == null ? "not a supported PKM file." : "";
-                return pk != null;
-            }
-            catch (Exception ex)
-            {
-                error = ex.Message;
-                return false;
-            }
-        }
+            => PkmUtil.TryLoadPkm(path, saveProvider.SAV, out pk, out error);
 
         private void BeginDragOut(PictureBox sprite, int side)
         {
-            var source = side == 1 ? pk1 : pk2;
-            if (source == null)
+            if ((side == 1 ? pk1 : pk2) is not { } source)
                 return;
 
-            string? file = null;
             dragSourceSide = side;
-            try
-            {
-                var pk = source.Clone();
-                pk.ForcePartyData();
-                var data = new byte[pk.SIZE_PARTY];
-                pk.WriteDecryptedDataParty(data);
-
-                file = FileUtil.GetPKMTempFileName(pk, encrypt: false);
-                File.WriteAllBytes(file, data);
-                sprite.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { file }), DragDropEffects.Copy);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Drag && Drop failed: {ex.Message}", Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                dragSourceSide = 0;
-                if (file != null)
-                    _ = DeleteLaterAsync(file);
-            }
-        }
-
-        private static async Task DeleteLaterAsync(string file)
-        {
-            await Task.Delay(TempFileLifetime).ConfigureAwait(false);
-            try { File.Delete(file); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            try { PkmUtil.DragOut(sprite, source); }
+            finally { dragSourceSide = 0; }
         }
 
         #endregion

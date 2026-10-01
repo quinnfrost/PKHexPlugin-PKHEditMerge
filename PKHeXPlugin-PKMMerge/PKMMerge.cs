@@ -13,6 +13,7 @@ public class PKMMerge : IPlugin
     public IPKMView PKMEditor { get; private set; } = null!;
 
     private FormDiff? formDiff;
+    private PKHEditor? pkhEditor;
 
     public void Initialize(params object[] args)
     {
@@ -29,29 +30,38 @@ public class PKMMerge : IPlugin
         if (menuStrip.Items.Find("Menu_Tools", false) is not [ToolStripDropDownItem tools, ..])
             throw new ArgumentException("PKHeX menu strip has no Tools menu.", nameof(menuStrip));
 
-        var item = new ToolStripMenuItem(Name);
-        item.Click += (_, _) => ShowDiffForm();
-        tools.DropDownItems.Add(item);
+        var root = new ToolStripMenuItem(Name);
+        var compare = new ToolStripMenuItem("PKM Compare");
+        compare.Click += (_, _) => formDiff = Show(formDiff, () => new FormDiff(PKMEditor, SaveFileEditor));
+        var homeEditor = new ToolStripMenuItem("PKH Editor");
+        homeEditor.Click += (_, _) => pkhEditor = Show(pkhEditor, () => new PKHEditor(PKMEditor, SaveFileEditor));
+        root.DropDownItems.Add(compare);
+        root.DropDownItems.Add(homeEditor);
+        tools.DropDownItems.Add(root);
     }
 
-    private void ShowDiffForm()
+    // One instance per window: re-activate it if it is still open.
+    private static T Show<T>(T? existing, Func<T> create) where T : Form
     {
-        if (formDiff is null || formDiff.IsDisposed)
+        if (existing is null || existing.IsDisposed)
         {
-            formDiff = new FormDiff(PKMEditor, SaveFileEditor);
-            formDiff.Show();
+            existing = create();
+            existing.Show();
         }
-        else if (formDiff.WindowState == FormWindowState.Minimized)
+        else if (existing.WindowState == FormWindowState.Minimized)
         {
-            formDiff.WindowState = FormWindowState.Normal;
+            existing.WindowState = FormWindowState.Normal;
         }
-        formDiff.Activate();
+        existing.Activate();
+        return existing;
     }
 
     public void NotifyDisplayLanguageChanged(string language)
     {
         if (formDiff is { IsDisposed: false } form)
             form.RefreshNames();
+        if (pkhEditor is { IsDisposed: false } editor)
+            editor.RefreshNames();
     }
 
     public void NotifySaveLoaded() { }
