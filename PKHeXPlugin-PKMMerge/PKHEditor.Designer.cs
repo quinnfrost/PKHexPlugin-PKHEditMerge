@@ -61,6 +61,7 @@ namespace PKMMerge
             GB_VersionInfo = new System.Windows.Forms.GroupBox();
             TB_VersionInfo = new System.Windows.Forms.TextBox();
             L_Status = new System.Windows.Forms.Label();
+            B_Home = new System.Windows.Forms.Button();
             toolTip1 = new System.Windows.Forms.ToolTip(components);
             GB_Main.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)PB_Sprite).BeginInit();
@@ -87,7 +88,7 @@ namespace PKMMerge
             GB_Main.Controls.Add(TC_Info);
             GB_Main.Location = new System.Drawing.Point(8, 8);
             GB_Main.Name = "GB_Main";
-            GB_Main.Size = new System.Drawing.Size(500, 424);
+            GB_Main.Size = new System.Drawing.Size(500, 444);
             GB_Main.TabIndex = 0;
             GB_Main.TabStop = false;
             GB_Main.Text = "PKH";
@@ -334,7 +335,7 @@ namespace PKMMerge
             GB_Versions.Location = new System.Drawing.Point(516, 8);
             GB_Versions.Name = "GB_Versions";
             GB_Versions.Padding = new System.Windows.Forms.Padding(3, 18, 3, 3);
-            GB_Versions.Size = new System.Drawing.Size(136, 424);
+            GB_Versions.Size = new System.Drawing.Size(136, 444);
             GB_Versions.TabIndex = 1;
             GB_Versions.TabStop = false;
             GB_Versions.Text = "Versions";
@@ -382,7 +383,7 @@ namespace PKMMerge
             GB_VersionInfo.Controls.Add(TB_VersionInfo);
             GB_VersionInfo.Location = new System.Drawing.Point(660, 8);
             GB_VersionInfo.Name = "GB_VersionInfo";
-            GB_VersionInfo.Size = new System.Drawing.Size(232, 424);
+            GB_VersionInfo.Size = new System.Drawing.Size(232, 444);
             GB_VersionInfo.TabIndex = 2;
             GB_VersionInfo.TabStop = false;
             GB_VersionInfo.Text = "Version data";
@@ -401,12 +402,23 @@ namespace PKMMerge
             // 
             L_Status.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             L_Status.AutoEllipsis = true;
-            L_Status.Location = new System.Drawing.Point(8, 440);
+            L_Status.Location = new System.Drawing.Point(8, 456);
             L_Status.Name = "L_Status";
-            L_Status.Size = new System.Drawing.Size(884, 50);
+            L_Status.Size = new System.Drawing.Size(848, 36);
             L_Status.TabIndex = 3;
             L_Status.Text = "Drop a .pkh file to open it, or a PKM file to create or update a PKH. Drag the sprite out to export.";
             L_Status.TextAlign = System.Drawing.ContentAlignment.TopLeft;
+            // 
+            // B_Home
+            // 
+            B_Home.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            B_Home.Location = new System.Drawing.Point(864, 460);
+            B_Home.Name = "B_Home";
+            B_Home.Size = new System.Drawing.Size(28, 28);
+            B_Home.TabIndex = 4;
+            B_Home.Text = "H";
+            B_Home.UseVisualStyleBackColor = true;
+            B_Home.Click += B_Home_Click;
             // 
             // PKHEditor
             // 
@@ -418,6 +430,7 @@ namespace PKMMerge
             Controls.Add(GB_Versions);
             Controls.Add(GB_VersionInfo);
             Controls.Add(L_Status);
+            Controls.Add(B_Home);
             MinimumSize = new System.Drawing.Size(916, 440);
             Name = "PKHEditor";
             Text = "PKH Editor";
@@ -474,6 +487,7 @@ namespace PKMMerge
         private System.Windows.Forms.ComboBox CB_CreateFormat;
         private System.Windows.Forms.Button B_CreateVersion;
         private System.Windows.Forms.GroupBox GB_VersionInfo;
+        private System.Windows.Forms.Button B_Home;
         private System.Windows.Forms.TextBox TB_VersionInfo;
         private System.Windows.Forms.Label L_Status;
         private System.Windows.Forms.ToolTip toolTip1;

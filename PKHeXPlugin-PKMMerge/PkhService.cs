@@ -65,6 +65,37 @@ internal static class PkhService
         return list;
     }
 
+    // Follows the main editor's save, not the right-side selection: picking a version to inspect shouldn't
+    // change what "this PKH" looks like at a glance. When the active save's generation was never deposited,
+    // falls back in PKH.LatestGameData's own preference order (nearest/newest first), not GetVersions' fixed
+    // enum order -- that order put an arbitrary version first, not the best one.
+    public static readonly HomeGameDataFormat[] FallbackPreference =
+    [
+        HomeGameDataFormat.PA9, HomeGameDataFormat.PB7, HomeGameDataFormat.PK9,
+        HomeGameDataFormat.PB8, HomeGameDataFormat.PA8, HomeGameDataFormat.PK8,
+    ];
+
+    /// <summary>The stored version to display for <paramref name="pkh"/>: the active save's own generation when deposited, else the fallback order.</summary>
+    public static HomeGameDataFormat GetPreferredFormat(PKH pkh, Type? savPkmType)
+    {
+        var versions = GetVersions(pkh);
+        var current = savPkmType != null ? PKH.GetType(savPkmType) : HomeGameDataFormat.None;
+        return versions.Contains(current)
+            ? current
+            : FallbackPreference.FirstOrDefault(versions.Contains, HomeGameDataFormat.None);
+    }
+
+    // PKH.FileNameWithoutExtension throws: PKHeX's namer slices Data up to SIZE_STORED, which exceeds a PKH's buffer.
+    public static string GetDefaultFileName(PKH p)
+    {
+        foreach (var format in GetVersions(p))
+        {
+            if (Export(p, format) is { } pk)
+                return pk.FileNameWithoutExtension;
+        }
+        return $"{p.Species:0000} - {p.Nickname} - {p.EncryptionConstant:X8}";
+    }
+
     public static bool TryLoad(string path, [NotNullWhen(true)] out PKH? pkh, out string error)
     {
         pkh = null;
