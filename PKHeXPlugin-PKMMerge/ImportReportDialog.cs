@@ -7,7 +7,9 @@ namespace PKMMerge;
 /// <summary>Shows an <see cref="ImportPlan"/> grouped by severity and asks whether to apply it.</summary>
 internal static class ImportReportDialog
 {
-    public static bool Confirm(IWin32Window owner, ImportPlan plan, string title, Font font)
+    /// <summary>Shows the report; true = apply. When <paramref name="offerDiscardItem"/> the dialog also
+    /// offers applying without returning the held item, reported via <paramref name="discardItem"/>.</summary>
+    public static bool Confirm(IWin32Window owner, ImportPlan plan, string title, Font font, bool offerDiscardItem, out bool discardItem)
     {
         using var form = new Form
         {
@@ -66,13 +68,21 @@ internal static class ImportReportDialog
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(8) };
         var ok = new Button { Text = plan.NeedsConfirm ? "Apply anyway" : "Apply", Size = new Size(110, 32), DialogResult = DialogResult.OK, Enabled = !plan.IsBlocked };
         var cancel = new Button { Text = "Cancel", Size = new Size(96, 32), DialogResult = DialogResult.Cancel };
-        bottom.Controls.AddRange([cancel, ok]);
+        bottom.Controls.Add(cancel);
+        bottom.Controls.Add(ok);
+        if (offerDiscardItem)
+        {
+            // Leftmost of the RightToLeft row (still bottom-right of the dialog): apply without returning the held item.
+            bottom.Controls.Add(new Button { Text = "Apply and Discard item", Size = new Size(160, 32), DialogResult = DialogResult.Yes, Enabled = !plan.IsBlocked });
+        }
         form.AcceptButton = ok;
         form.CancelButton = cancel;
 
         form.Controls.Add(list);
         form.Controls.Add(bottom);
-        return form.ShowDialog(owner) == DialogResult.OK;
+        var result = form.ShowDialog(owner);
+        discardItem = result == DialogResult.Yes;
+        return result is DialogResult.OK or DialogResult.Yes;
     }
 
     // A plain read-only textbox is enough for a single message; mirrors this dialog's own style rather than a new form type.

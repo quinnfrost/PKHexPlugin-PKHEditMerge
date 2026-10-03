@@ -62,6 +62,10 @@ namespace PKMMerge
             TB_VersionInfo = new System.Windows.Forms.TextBox();
             L_Status = new System.Windows.Forms.Label();
             B_Home = new System.Windows.Forms.Button();
+            B_Save = new System.Windows.Forms.Button();
+            B_Close = new System.Windows.Forms.Button();
+            CHK_UseCustomTracker = new System.Windows.Forms.CheckBox();
+            B_ClearTracker = new System.Windows.Forms.Button();
             toolTip1 = new System.Windows.Forms.ToolTip(components);
             GB_Main.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)PB_Sprite).BeginInit();
@@ -84,6 +88,7 @@ namespace PKMMerge
             GB_Main.Controls.Add(L_Tracker);
             GB_Main.Controls.Add(TB_Tracker);
             GB_Main.Controls.Add(B_NewTracker);
+            GB_Main.Controls.Add(B_ClearTracker);
             GB_Main.Controls.Add(L_Ids);
             GB_Main.Controls.Add(TC_Info);
             GB_Main.Location = new System.Drawing.Point(8, 8);
@@ -128,19 +133,29 @@ namespace PKMMerge
             TB_Tracker.Location = new System.Drawing.Point(207, 53);
             TB_Tracker.MaxLength = 16;
             TB_Tracker.Name = "TB_Tracker";
-            TB_Tracker.Size = new System.Drawing.Size(150, 21);
+            TB_Tracker.Size = new System.Drawing.Size(128, 21);
             TB_Tracker.TabIndex = 3;
             TB_Tracker.Validated += TB_Tracker_Validated;
             // 
             // B_NewTracker
             // 
-            B_NewTracker.Location = new System.Drawing.Point(366, 51);
+            B_NewTracker.Location = new System.Drawing.Point(341, 51);
             B_NewTracker.Name = "B_NewTracker";
-            B_NewTracker.Size = new System.Drawing.Size(86, 26);
+            B_NewTracker.Size = new System.Drawing.Size(50, 26);
             B_NewTracker.TabIndex = 4;
-            B_NewTracker.Text = "Generate";
+            B_NewTracker.Text = "Gen";
             B_NewTracker.UseVisualStyleBackColor = true;
             B_NewTracker.Click += B_NewTracker_Click;
+            // 
+            // B_ClearTracker
+            // 
+            B_ClearTracker.Location = new System.Drawing.Point(397, 51);
+            B_ClearTracker.Name = "B_ClearTracker";
+            B_ClearTracker.Size = new System.Drawing.Size(50, 26);
+            B_ClearTracker.TabIndex = 7;
+            B_ClearTracker.Text = "Clear";
+            B_ClearTracker.UseVisualStyleBackColor = true;
+            B_ClearTracker.Click += B_ClearTracker_Click;
             // 
             // L_Ids
             // 
@@ -404,7 +419,7 @@ namespace PKMMerge
             L_Status.AutoEllipsis = true;
             L_Status.Location = new System.Drawing.Point(8, 456);
             L_Status.Name = "L_Status";
-            L_Status.Size = new System.Drawing.Size(848, 36);
+            L_Status.Size = new System.Drawing.Size(554, 36);
             L_Status.TabIndex = 3;
             L_Status.Text = "Drop a .pkh file to open it, or a PKM file to create or update a PKH. Drag the sprite out to export.";
             L_Status.TextAlign = System.Drawing.ContentAlignment.TopLeft;
@@ -420,6 +435,39 @@ namespace PKMMerge
             B_Home.UseVisualStyleBackColor = true;
             B_Home.Click += B_Home_Click;
             // 
+            // B_Save
+            // 
+            B_Save.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            B_Save.Location = new System.Drawing.Point(708, 460);
+            B_Save.Name = "B_Save";
+            B_Save.Size = new System.Drawing.Size(70, 28);
+            B_Save.TabIndex = 5;
+            B_Save.Text = "Save";
+            B_Save.UseVisualStyleBackColor = true;
+            B_Save.Click += B_Save_Click;
+            // 
+            // B_Close
+            // 
+            B_Close.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            B_Close.Location = new System.Drawing.Point(786, 460);
+            B_Close.Name = "B_Close";
+            B_Close.Size = new System.Drawing.Size(70, 28);
+            B_Close.TabIndex = 6;
+            B_Close.Text = "Close";
+            B_Close.UseVisualStyleBackColor = true;
+            B_Close.Click += B_CloseFile_Click;
+            // 
+            // CHK_UseCustomTracker
+            // 
+            CHK_UseCustomTracker.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            CHK_UseCustomTracker.Location = new System.Drawing.Point(570, 463);
+            CHK_UseCustomTracker.Name = "CHK_UseCustomTracker";
+            CHK_UseCustomTracker.Size = new System.Drawing.Size(130, 22);
+            CHK_UseCustomTracker.TabIndex = 7;
+            CHK_UseCustomTracker.Text = "Custom Tracker";
+            CHK_UseCustomTracker.UseVisualStyleBackColor = true;
+            CHK_UseCustomTracker.CheckedChanged += CHK_UseCustomTracker_CheckedChanged;
+            // 
             // PKHEditor
             // 
             AllowDrop = true;
@@ -431,6 +479,9 @@ namespace PKMMerge
             Controls.Add(GB_VersionInfo);
             Controls.Add(L_Status);
             Controls.Add(B_Home);
+            Controls.Add(B_Save);
+            Controls.Add(B_Close);
+            Controls.Add(CHK_UseCustomTracker);
             MinimumSize = new System.Drawing.Size(916, 440);
             Name = "PKHEditor";
             Text = "PKH Editor";
@@ -463,6 +514,7 @@ namespace PKMMerge
         private System.Windows.Forms.Label L_Tracker;
         private System.Windows.Forms.TextBox TB_Tracker;
         private System.Windows.Forms.Button B_NewTracker;
+        private System.Windows.Forms.Button B_ClearTracker;
         private System.Windows.Forms.Label L_Ids;
         private System.Windows.Forms.TabControl TC_Info;
         private System.Windows.Forms.TabPage Tab_Main;
@@ -490,6 +542,9 @@ namespace PKMMerge
         private System.Windows.Forms.Button B_Home;
         private System.Windows.Forms.TextBox TB_VersionInfo;
         private System.Windows.Forms.Label L_Status;
+        private System.Windows.Forms.Button B_Save;
+        private System.Windows.Forms.Button B_Close;
+        private System.Windows.Forms.CheckBox CHK_UseCustomTracker;
         private System.Windows.Forms.ToolTip toolTip1;
     }
 }

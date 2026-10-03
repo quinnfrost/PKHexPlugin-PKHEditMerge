@@ -10,10 +10,10 @@ namespace PKMMerge;
 
 /// <summary>
 /// HOME box viewer, laid out like PKHeX's Box Viewer window (SAV_BoxViewer + BoxEditor + PokeGrid):
-/// a toolbar row (swap, ◀, box selector, ▶) over a 6×5 grid drawn on the box wallpaper, holding up to
-/// 32 boxes of .pkh files under {run dir}/Home/Box N. A slot's position is the file-name prefix
-/// ("007 - Pikachu.pkh"). Only .pkh files can be dragged in or out; right-click / double-click
-/// loads a slot into the PKH Editor or saves the editor's PKH there.
+/// a toolbar row (swap, ◀, box selector, ▶) over a 6×5 grid drawn on the box wallpaper. All .pkh
+/// files live flat under {run dir}/Home; which box and slot a file occupies is recorded in
+/// Home/home.json, and file names stay in PKHeX's standard form. Only .pkh files can be dragged
+/// in or out; right-click / double-click loads a slot into the PKH Editor or saves the editor's PKH there.
 /// </summary>
 internal sealed class HomeForm : Form
 {
@@ -246,6 +246,14 @@ internal sealed class HomeForm : Form
             RenderSlot(i);
     }
 
+    /// <summary>Re-renders after PKHeX's display language changed: the localized GameInfo name tables
+    /// are already swapped by the time plugins are notified, so re-reading the files refreshes tooltips.</summary>
+    internal void RefreshNames()
+    {
+        for (int i = 0; i < Slots.Length; i++)
+            RenderSlot(i);
+    }
+
     private void B_BoxSwap_Click(object? sender, EventArgs e)
     {
         int other = (box + 1) % HomeStorage.BoxCount;
@@ -374,7 +382,7 @@ internal sealed class HomeForm : Form
                 error = $"{HomeStorage.GetBoxName(box)} is full; \"{Path.GetFileName(file)}\" was not stored.";
                 break;
             }
-            if (!HomeStorage.Place(box, slot, file, move: false, out var placeError))
+            if (!HomeStorage.Place(box, slot, file, out var placeError))
             {
                 error = $"Couldn't store \"{Path.GetFileName(file)}\": {placeError}";
                 break;
@@ -407,7 +415,7 @@ internal sealed class HomeForm : Form
         }
         else
         {
-            error = HomeStorage.Place(box, target, srcPath, move: true, out var placeError) ? null : placeError;
+            error = HomeStorage.SetPosition(srcPath, box, target, out var placeError) ? null : placeError;
         }
         ReloadBox();
         if (error != null)
@@ -470,7 +478,12 @@ internal sealed class HomeForm : Form
         if (!PkhService.TrySave(current, path, out var error))
             MessageBox.Show(this, $"Couldn't save to {HomeStorage.GetBoxName(box)}: {error}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         else
+        {
+            // Pin the new file to the slot it was saved into; otherwise the next reconcile would only
+            // see an untracked file and hand it the first free slot (which may be a different one).
+            HomeStorage.SetPosition(path, box, index, out _);
             ReloadBox();
+        }
     }
 
     private void DeleteSlot(int index)

@@ -96,6 +96,94 @@ internal static class PkhService
         return $"{p.Species:0000} - {p.Nickname} - {p.EncryptionConstant:X8}";
     }
 
+    /// <summary>Game tables a version block is numbered in: block IDs always follow that game, not the origin version.</summary>
+    public static (GameVersion Version, EntityContext Context)? GetFormatContext(HomeGameDataFormat format) => format switch
+    {
+        HomeGameDataFormat.PB7 => (GameVersion.GP, EntityContext.Gen7b),
+        HomeGameDataFormat.PK8 => (GameVersion.SW, EntityContext.Gen8),
+        HomeGameDataFormat.PA8 => (GameVersion.PLA, EntityContext.Gen8a),
+        HomeGameDataFormat.PB8 => (GameVersion.BD, EntityContext.Gen8b),
+        HomeGameDataFormat.PK9 => (GameVersion.SL, EntityContext.Gen9),
+        HomeGameDataFormat.PA9 => (GameVersion.ZA, EntityContext.Gen9a),
+        _ => null,
+    };
+
+    /// <summary>Readable place name for a MetLocation/EggLocation ID of a version's block, or null when unknown.</summary>
+    public static string? GetLocationDisplayName(HomeGameDataFormat format, bool eggLocation, string rawValue)
+    {
+        if (GetFormatContext(format) is not { } ctx || !int.TryParse(rawValue, out var id) || id is <= 0 or > ushort.MaxValue)
+            return null;
+        try
+        {
+            foreach (var combo in GameInfo.GetLocationList(ctx.Version, ctx.Context, eggLocation))
+            {
+                if (combo.Value == id)
+                    return combo.Text;
+            }
+        }
+        catch (Exception) { /* unknown version/context combo — the caller keeps the raw number */ }
+        return null;
+    }
+
+    /// <summary>Move-typed fields whose IDs resolve through the move name table.</summary>
+    internal static readonly HashSet<string> MoveProps =
+    [
+        "Move1", "Move2", "Move3", "Move4",
+        "RelearnMove1", "RelearnMove2", "RelearnMove3", "RelearnMove4",
+    ];
+
+    internal static bool IsMoveProp(string key) => MoveProps.Contains(key);
+
+    /// <summary>
+    /// Readable name for an ID-typed field (Ball/Ability/Move/Met/EggLocation), or null when the key
+    /// has no table, the value doesn't parse, or no format context is available for a location.
+    /// </summary>
+    public static string? ReadableValue(string key, string raw, HomeGameDataFormat? format)
+    {
+        // StatAlignment IS a Nature value (Gen8+ stores it separately; PKHeX itself renders it through
+        // Strings.natures — see EntitySummary.Nature), so it shares Nature's table. Both arrive as the
+        // English enum name, not an ID — handled before the numeric gate.
+        if (key is "Nature" or "StatAlignment")
+            return NatureName(raw);
+        if (key == "Gender")
+            return GenderSymbol(raw); // enum name or numeric id; no symbol for None/Genderless
+        if (!int.TryParse(raw, out var id) || id <= 0)
+            return null; // 0 = no meaningful name for any of these tables
+        var strings = GameInfo.Strings;
+        if (key == "Ball")
+            return id < strings.balllist.Length ? strings.balllist[id] : null;
+        if (key == "Ability")
+            return id < strings.Ability.Count ? strings.Ability[id] : null;
+        if (key is "MetLocation" or "EggLocation")
+            return format is { } f ? GetLocationDisplayName(f, key == "EggLocation", raw) : null;
+        if (IsMoveProp(key))
+            return id < strings.Move.Count ? strings.Move[id] : null;
+        return null;
+    }
+
+    /// <summary>Localized nature name from an enum name or numeric id, or null when it doesn't resolve.</summary>
+    private static string? NatureName(string raw)
+    {
+        // Enum.TryParse accepts both the name ("Hardy") and the numeric value ("13").
+        if (!Enum.TryParse(raw, out Nature nature))
+            return null;
+        var names = GameInfo.Strings.Natures;
+        return (uint)(int)nature < (uint)names.Count ? names[(int)nature] : null;
+    }
+
+    /// <summary>♂/♀ for a Gender value (enum name or numeric id), or null when there is no symbol.</summary>
+    private static string? GenderSymbol(string raw)
+    {
+        if (!Enum.TryParse(raw, out Gender gender))
+            return null;
+        return gender switch
+        {
+            Gender.Male => "♂",
+            Gender.Female => "♀",
+            _ => null, // None / Genderless: no symbol exists, keep the raw value alone
+        };
+    }
+
     public static bool TryLoad(string path, [NotNullWhen(true)] out PKH? pkh, out string error)
     {
         pkh = null;
@@ -130,11 +218,12 @@ internal static class PkhService
         catch (Exception) { return null; }
     }
 
-    /// <summary>New PKH from the first PKM. A missing tracker gets a generated FFFF-prefixed one.</summary>
-    public static PKH Create(PKM pk, out bool generatedTracker)
+    /// <summary>New PKH from the first PKM. A missing tracker gets a generated FFFF-prefixed one only
+    /// when custom trackers are enabled; otherwise it stays 0 and identity relies on the fallback match.</summary>
+    public static PKH Create(PKM pk, bool customTracker, out bool generatedTracker)
     {
         var pkh = new PKH(PKH.ConvertFromPKM(pk.Clone()).Rebuild());
-        generatedTracker = pkh.Tracker == 0;
+        generatedTracker = customTracker && pkh.Tracker == 0;
         if (generatedTracker)
             pkh.Tracker = NewTracker();
         return pkh;
@@ -193,28 +282,62 @@ internal static class PkhService
     #region Import planning
 
     /// <summary>How the dropped PKM relates to the loaded PKH.</summary>
-    internal enum Identity { SameTracker, DifferentTracker, MatchedWithoutTracker, MatchedPidDiffers, Mismatch }
+    internal enum Identity
+    {
+        SameTracker,
+        DifferentTracker,
+        /// <summary>Fallback match with the incoming tracker = 0: the PKH's tracker (or 0) is kept.</summary>
+        MatchedWithoutTracker,
+        /// <summary>Fallback match with the PKH tracker = 0: the incoming PKM's tracker is written into the PKH.</summary>
+        MatchedIncomingTracker,
+        MatchedPidDiffers,
+        Mismatch,
+    }
 
-    public static Identity GetIdentity(PKH pkh, PKM pk)
+    /// <summary>Classifies how the dropped PKM relates to the loaded PKH.</summary>
+    /// <param name="customTracker">True = a tracker on both sides is the primary identity signal (original
+    /// behavior). False = only the EC/ID32/OT fallback match decides sameness; a conflicting pair of
+    /// non-zero trackers is still reported via <see cref="Identity.DifferentTracker"/>.</param>
+    public static Identity GetIdentity(PKH pkh, PKM pk, bool customTracker)
     {
         ulong pkTracker = pk is IHomeTrack t ? t.Tracker : 0;
-        if (pkTracker != 0 && pkh.Tracker != 0)
-            return pkTracker == pkh.Tracker ? Identity.SameTracker : Identity.DifferentTracker;
 
         // Species may differ through evolution, so it is not part of the match.
         bool same = pk.EncryptionConstant == pkh.EncryptionConstant
                     && pk.ID32 == pkh.ID32
                     && pk.OriginalTrainerName == pkh.OriginalTrainerName;
+
+        if (customTracker)
+        {
+            // Original behavior: a tracker present on both sides is the primary identity signal.
+            if (pkTracker != 0 && pkh.Tracker != 0)
+                return pkTracker == pkh.Tracker ? Identity.SameTracker : Identity.DifferentTracker;
+            if (!same)
+                return Identity.Mismatch;
+            if (pkh.Tracker == 0 && pkTracker != 0)
+                return Identity.MatchedIncomingTracker;
+            return pk.PID == pkh.PID ? Identity.MatchedWithoutTracker : Identity.MatchedPidDiffers;
+        }
+
+        // Custom tracker off: the fallback match alone decides sameness; the tracker that exists still
+        // survives (see PlanImport) and its disposition is still reported. A conflicting pair of
+        // non-zero trackers still raises the original DifferentTracker warning.
         if (!same)
             return Identity.Mismatch;
-        return pk.PID == pkh.PID ? Identity.MatchedWithoutTracker : Identity.MatchedPidDiffers;
+        if (pkh.Tracker == 0 && pkTracker != 0)
+            return Identity.MatchedIncomingTracker;
+        if (pkTracker != 0 && pkTracker != pkh.Tracker)
+            return Identity.DifferentTracker; // both non-zero: the 0-PKH case returned above
+        if (pk.PID != pkh.PID)
+            return Identity.MatchedPidDiffers;
+        return pkTracker == 0 ? Identity.MatchedWithoutTracker : Identity.SameTracker;
     }
 
     /// <summary>
     /// Dry-runs PKHeX's PKH.CopyFrom on a copy and classifies every resulting change.
     /// Nothing is applied until the caller adopts <see cref="ImportPlan.Result"/>.
     /// </summary>
-    public static ImportPlan PlanImport(PKH current, PKM incoming)
+    public static ImportPlan PlanImport(PKH current, PKM incoming, bool customTracker)
     {
         var items = new List<ImportItem>();
         if (HasPC9(current))
@@ -224,11 +347,13 @@ internal static class PkhService
         }
 
         var target = PKH.GetType(incoming is PK7 ? typeof(PK8) : incoming.GetType());
-        AddIdentity(items, current, incoming);
+        AddIdentity(items, current, incoming, customTracker);
 
-        // Keep the HOME tracker: PKHeX copies the PKM's tracker unconditionally, even when it is 0.
+        // PKHeX copies the PKM's tracker unconditionally (even a 0), so pin the identity here:
+        // a non-zero PKH tracker wins (a differing non-zero pair is flagged by AddIdentity); a 0 PKH
+        // tracker adopts the incoming PKM's tracker instead of wiping it.
         var source = incoming.Clone();
-        if (source is IHomeTrack track && track.Tracker != current.Tracker)
+        if (source is IHomeTrack track && current.Tracker != 0 && track.Tracker != current.Tracker)
             track.Tracker = current.Tracker;
 
         var before = Copy(current);
@@ -255,10 +380,10 @@ internal static class PkhService
         return new ImportPlan(after, items);
     }
 
-    private static void AddIdentity(List<ImportItem> items, PKH pkh, PKM pk)
+    private static void AddIdentity(List<ImportItem> items, PKH pkh, PKM pk, bool customTracker)
     {
         const string group = "Identity";
-        switch (GetIdentity(pkh, pk))
+        switch (GetIdentity(pkh, pk, customTracker))
         {
             case Identity.SameTracker:
                 break;
@@ -266,12 +391,22 @@ internal static class PkhService
                 items.Add(new(ImportSeverity.Confirm, group, $"HOME tracker differs: PKH {pkh.Tracker:X16}, PKM {((IHomeTrack)pk).Tracker:X16}. This may be a different Pokémon."));
                 break;
             case Identity.MatchedWithoutTracker:
-                items.Add(new(ImportSeverity.Confirm, group, $"PKM has no HOME tracker; EC, trainer ID and OT match. The PKH tracker {pkh.Tracker:X16} will be kept."));
+                // Both trackers 0 + fallback match is the normal case: import silently, no identity prompt.
+                if (pkh.Tracker != 0)
+                    items.Add(new(ImportSeverity.Confirm, group, $"PKM has no HOME tracker; EC, trainer ID and OT match. The PKH tracker {pkh.Tracker:X16} will be kept."));
+                break;
+            case Identity.MatchedIncomingTracker:
+                items.Add(new(ImportSeverity.Confirm, group,
+                    $"PKH has no HOME tracker; EC, trainer ID and OT match. The PKM tracker {((IHomeTrack)pk).Tracker:X16} will be written into the PKH."
+                    + (pk.PID != pkh.PID ? $" PID differs (PKH {pkh.PID:X8}, PKM {pk.PID:X8})." : "")));
                 break;
             case Identity.MatchedPidDiffers:
-                items.Add(new(ImportSeverity.Confirm, group, $"EC, trainer ID and OT match but PID differs (PKH {pkh.PID:X8}, PKM {pk.PID:X8})."));
+                // Reaches here only with the incoming tracker = 0, so pkh.Tracker == 0 means both are 0:
+                // same silent rule — any PID overwrite is already reported by the core origin-data line.
+                if (pkh.Tracker != 0)
+                    items.Add(new(ImportSeverity.Confirm, group, $"EC, trainer ID and OT match but PID differs (PKH {pkh.PID:X8}, PKM {pk.PID:X8})."));
                 break;
-            default:
+            default: // fallback UNmatch — still reported, including when both trackers are 0.
                 items.Add(new(ImportSeverity.Confirm, group, "EC, trainer ID or OT differ from the PKH. This is most likely a different Pokémon."));
                 break;
         }
@@ -298,7 +433,7 @@ internal static class PkhService
     internal sealed record Change(string Key, string Before, string After);
 
     // Stored data only: get-only properties (SV, Gen9, Generation, ...) are derived from these.
-    private static bool IsStored(PropertyInfo pi)
+    internal static bool IsStored(PropertyInfo pi)
         => pi.GetIndexParameters().Length == 0 && (pi.SetMethod is { IsPublic: true } || pi.PropertyType.IsByRefLike);
 
     /// <summary>Changed shared (core) data: the PKH's own properties plus ribbons and marks that live only on <see cref="PKH.Core"/>.</summary>
@@ -393,7 +528,12 @@ internal static class PkhService
     private static bool IsCountDecrease(Change c)
         => long.TryParse(c.Before, out var b) && long.TryParse(c.After, out var a) && a < b;
 
-    private static string Describe(Change c) => $"{c.Key}: {Short(c.Before)} → {Short(c.After)}";
+    private static string Describe(Change c, HomeGameDataFormat? format = null) =>
+        $"{c.Key}: {Annotate(c.Key, c.Before, format)} → {Annotate(c.Key, c.After, format)}";
+
+    /// <summary>Raw value, with a readable table name in parentheses when the key resolves.</summary>
+    private static string Annotate(string key, string raw, HomeGameDataFormat? format) =>
+        ReadableValue(key, raw, format) is { } name ? $"{Short(raw)} ({name})" : Short(raw);
 
     private static string Short(string s) => s.Length > 24 ? s[..24] + "…" : s;
 
@@ -457,9 +597,9 @@ internal static class PkhService
             foreach (var c in DiffPkm(a, b))
             {
                 if (SizeKeys.Contains(c.Key))
-                    items.Add(new(ImportSeverity.Confirm, group, Describe(c) + " (shared size scalar is overwritten by the imported version's Scale, as HOME does)"));
+                    items.Add(new(ImportSeverity.Confirm, group, Describe(c, format) + " (shared size scalar is overwritten by the imported version's Scale, as HOME does)"));
                 else if (!coreKeys.Contains(c.Key) && !ExportWhitelist.Contains(c.Key))
-                    items.Add(new(ImportSeverity.Confirm, group, Describe(c)));
+                    items.Add(new(ImportSeverity.Confirm, group, Describe(c, format)));
             }
         }
     }
@@ -486,16 +626,100 @@ internal static class PkhService
                 continue; // Kept from the PKH on purpose.
             if (ExportWhitelist.Contains(c.Key))
             {
-                items.Add(new(ImportSeverity.Info, group, Describe(c) + " (not stored by HOME / recalculated)"));
+                // HeldItem going to 0 is the one whitelisted loss we can actually give back — say so.
+                var note = c.Key == nameof(PKM.HeldItem)
+                    ? " (not stored by HOME / recalculated; returned to the bag on apply unless discarded)"
+                    : " (not stored by HOME / recalculated)";
+                items.Add(new(ImportSeverity.Info, group, Describe(c, target) + note));
                 continue;
             }
             if (native != null && ReadDisplay(native, c.Key) == c.After)
             {
-                items.Add(new(ImportSeverity.Info, group, Describe(c) + " (PKHeX HOME conversion)"));
+                items.Add(new(ImportSeverity.Info, group, Describe(c, target) + " (PKHeX HOME conversion)"));
                 continue;
             }
-            items.Add(new(ImportSeverity.Block, group, Describe(c) + " — merging with the existing PKH would change the imported data."));
+            items.Add(new(ImportSeverity.Block, group, Describe(c, target) + " — merging with the existing PKH would change the imported data."));
         }
+    }
+
+    /// <summary>
+    /// Gives the incoming PKM's held item to the save's bag. PKHeX's import never copies the item into
+    /// the PKH (GameDataCore.CopyFrom has that line commented out), so without this it is lost.
+    /// Nothing is written until the pouch edit has succeeded, and a failed write/read-back is restored
+    /// byte-for-byte from a snapshot — so a caller that then cancels the import leaves no trace.
+    /// </summary>
+    /// <returns>False = the item couldn't be stored; <paramref name="detail"/> says why (or names the item on success).</returns>
+    public static bool TryReturnItemToBag(SaveFile sav, PKM pk, out string detail)
+    {
+        detail = "";
+        if (pk.HeldItem <= 0)
+            return true;
+
+        int destItem = ItemConverter.GetItemForFormat(pk.HeldItem, pk.Context, sav.Context);
+        if (destItem <= 0 || destItem > ushort.MaxValue)
+        {
+            detail = $"item {pk.HeldItem} doesn't exist in {sav.Version} data";
+            return false;
+        }
+        string itemName = ItemName(destItem);
+
+        var bag = sav.Inventory;
+        if (bag.Pouches.Count == 0)
+        {
+            detail = "the save has no bag to store items in";
+            return false;
+        }
+        var pouch = FindItemPouch(bag, destItem);
+        if (pouch == null)
+        {
+            detail = $"{itemName} isn't a pocket item for {sav.Version}";
+            return false;
+        }
+
+        int before = pouch.Items.FirstOrDefault(z => z.Index == destItem && z.Count > 0)?.Count ?? 0;
+        int after = pouch.GiveItem(bag, (ushort)destItem, 1);
+        if (after <= before)
+        {
+            // -1 = no empty slot, equal = clamped at the pouch maximum. The edit stayed local; the save is untouched.
+            detail = after < 0 ? "the bag is full" : $"{itemName} is already at its maximum quantity";
+            return false;
+        }
+
+        var backup = sav.Data.ToArray();
+        try
+        {
+            bag.CopyTo(sav);
+            // Inventory is rebuilt from save data on every access: read the item straight back.
+            if (!sav.Inventory.GetPouch(pouch.Type).HasItem((ushort)destItem))
+                throw new InvalidOperationException("the written bag could not be read back");
+        }
+        catch (Exception ex)
+        {
+            backup.AsSpan().CopyTo(sav.Data);
+            detail = $"couldn't store {itemName} in the bag: {ex.Message}";
+            return false;
+        }
+
+        detail = itemName;
+        return true;
+    }
+
+    /// <summary>First pouch that may legally hold the item, preferring the standard Items pocket.</summary>
+    private static InventoryPouch? FindItemPouch(PlayerBag bag, int item)
+    {
+        foreach (var type in new[] { InventoryType.Items, InventoryType.Berries })
+        {
+            var pouch = bag.Pouches.FirstOrDefault(z => z.Type == type);
+            if (pouch != null && pouch.CanContain((ushort)item) && bag.Info.IsLegal(type, item, 1))
+                return pouch;
+        }
+        return bag.Pouches.FirstOrDefault(z => z.CanContain((ushort)item) && bag.Info.IsLegal(z.Type, item, 1));
+    }
+
+    private static string ItemName(int id)
+    {
+        var names = GameInfo.Strings.Item;
+        return id > 0 && id < names.Count ? names[id] : $"item {id}";
     }
 
     private static PKM? GetNativeRoundTrip(PKM incoming, HomeGameDataFormat target, ulong tracker)
