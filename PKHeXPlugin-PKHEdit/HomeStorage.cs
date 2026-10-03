@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>
 /// File-backed HOME storage: every .pkh sits flat under {run dir}/Home with a PKHeX-standard file

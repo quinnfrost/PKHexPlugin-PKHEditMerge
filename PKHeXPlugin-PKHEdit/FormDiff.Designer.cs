@@ -1,4 +1,4 @@
-namespace PKMMerge
+namespace PKHEdit
 {
     partial class FormDiff
     {
@@ -290,7 +290,7 @@ namespace PKMMerge
             Margin = new System.Windows.Forms.Padding(2);
             MinimumSize = new System.Drawing.Size(736, 400);
             Name = "FormDiff";
-            Text = "PKMMerge";
+            Text = "PKHEdit";
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();

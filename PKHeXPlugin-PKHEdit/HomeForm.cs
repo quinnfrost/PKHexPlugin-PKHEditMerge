@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>
 /// HOME box viewer, laid out like PKHeX's Box Viewer window (SAV_BoxViewer + BoxEditor + PokeGrid):
@@ -285,7 +285,7 @@ internal sealed class HomeForm : Form
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"PKMMerge: wallpaper load failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"PKHEdit: wallpaper load failed: {ex.Message}");
         }
         var old = BoxPokeGrid.BackgroundImage;
         BoxPokeGrid.BackgroundImage = img;

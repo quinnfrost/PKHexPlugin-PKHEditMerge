@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Helpers shared by the plugin's windows.</summary>
 internal static class PkmUtil
@@ -83,7 +83,7 @@ internal static class PkmUtil
     }
 
     /// <summary>Data format tagging a drag with its origin slot ("box:slot") inside the HOME window.</summary>
-    public const string SlotDataFormat = "PKMMerge.HomeSlot";
+    public const string SlotDataFormat = "PKHEdit.HomeSlot";
 
     /// <summary>Drags <paramref name="pkh"/> out of <paramref name="source"/> as a temporary .pkh file, like the editor's sprite drag.</summary>
     public static void DragOutPkh(Control source, PKH pkh, string? slotTag = null)

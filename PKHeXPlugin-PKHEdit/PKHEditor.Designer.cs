@@ -1,4 +1,4 @@
-namespace PKMMerge
+namespace PKHEdit
 {
     partial class PKHEditor
     {

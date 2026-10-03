@@ -2,11 +2,11 @@ using System;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
-public class PKMMerge : IPlugin
+public class PKHEdit : IPlugin
 {
-    public string Name => nameof(PKMMerge);
+    public string Name => nameof(PKHEdit);
     public int Priority => 1; // Loading order, lowest is first.
 
     public ISaveFileProvider SaveFileEditor { get; private set; } = null!;

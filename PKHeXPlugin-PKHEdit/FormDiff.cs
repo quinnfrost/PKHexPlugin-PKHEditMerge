@@ -11,7 +11,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace PKMMerge
+namespace PKHEdit
 {
     public partial class FormDiff : Form
     {

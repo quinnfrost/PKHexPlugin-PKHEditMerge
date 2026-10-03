@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Side-by-side hex view of one binary property that highlights differing bytes and allows editing.</summary>
 public partial class HexCompareForm : Form

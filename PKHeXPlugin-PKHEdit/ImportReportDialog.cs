@@ -2,7 +2,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Shows an <see cref="ImportPlan"/> grouped by severity and asks whether to apply it.</summary>
 internal static class ImportReportDialog

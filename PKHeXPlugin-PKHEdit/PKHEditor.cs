@@ -9,7 +9,7 @@ using System.Text;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Views a PKH (HOME) file, updates it from dropped PKMs, and exports its stored versions.</summary>
 public partial class PKHEditor : Form

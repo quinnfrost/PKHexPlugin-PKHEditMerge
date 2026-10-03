@@ -6,7 +6,7 @@ using System.Linq;
 using System.Reflection;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Severity of one entry in an <see cref="ImportPlan"/>.</summary>
 internal enum ImportSeverity

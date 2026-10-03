@@ -22,23 +22,23 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Build
-        run: dotnet build PKHeXPlugin-PKMMerge.sln -c Release
+        run: dotnet build PKHeXPlugin-PKHEdit.sln -c Release
 
       - name: Publish
-        run: dotnet publish PKHeXPlugin-PKMMerge/PKHeXPlugin-PKMMerge.csproj -c Release -o publish
+        run: dotnet publish PKHeXPlugin-PKHEdit/PKHeXPlugin-PKHEdit.csproj -c Release -o publish
 
       - name: Package
-        run: Compress-Archive -Path publish\* -DestinationPath PKHeXPlugin-PKMMerge.zip
+        run: Compress-Archive -Path publish\* -DestinationPath PKHeXPlugin-PKHEdit.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PKHeXPlugin-PKMMerge
-          path: PKHeXPlugin-PKMMerge.zip
+          name: PKHeXPlugin-PKHEdit
+          path: PKHeXPlugin-PKHEdit.zip
 
       - name: Create release
-        if: startsWith(github.ref, 'refs/tags/')
+        # if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: PKHeXPlugin-PKMMerge.zip
+          files: PKHeXPlugin-PKHEdit.zip
           generate_release_notes: true
