@@ -82,7 +82,8 @@ internal static class PkmUtil
         }
     }
 
-    /// <summary>Data format tagging a drag with its origin slot ("box:slot") inside the HOME window.</summary>
+    /// <summary>Data format tagging a drag with its origin slot inside a HOME window: the full path of
+    /// the dragged .pkh, so the receiving window can move/swap it out of the shared storage.</summary>
     public const string SlotDataFormat = "PKHEdit.HomeSlot";
 
     /// <summary>Drags <paramref name="pkh"/> out of <paramref name="source"/> as a temporary .pkh file, like the editor's sprite drag.</summary>

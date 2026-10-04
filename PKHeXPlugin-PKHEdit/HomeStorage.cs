@@ -65,15 +65,39 @@ internal static class HomeStorage
         public int Slot { get; set; }
     }
 
-    /// <summary>Standard PKHeX-style file name for a PKH saved into a slot. The position itself is
+    /// <summary>Standard PKHeX-style file name for a PKH, without folder or clash-free suffix.</summary>
+    public static string GetCanonicalName(PKH pkh) => PathUtil.CleanFileName(PkhService.GetDefaultFileName(pkh)) + ".pkh";
+
+    /// <summary>Standard PKHeX-style path for a PKH saved into a slot. The position itself is
     /// recorded in the manifest afterwards, so <paramref name="box"/>/<paramref name="slot"/> only
-    /// matter for choosing a clash-free name.</summary>
-    public static string GetCanonicalPath(int box, int slot, PKH pkh)
+    /// matter for choosing a clash-free name. When <paramref name="replacingPath"/> is given (the file
+    /// the new one takes over) and already carries the standard name, it is returned as-is rather than
+    /// treated as a clash and suffixed.</summary>
+    public static string GetCanonicalPath(int box, int slot, PKH pkh, string? replacingPath = null)
     {
         _ = box;
         _ = slot;
-        var name = PathUtil.CleanFileName(PkhService.GetDefaultFileName(pkh)) + ".pkh";
+        var name = GetCanonicalName(pkh);
+        if (replacingPath != null && string.Equals(Path.GetFileName(replacingPath), name, StringComparison.OrdinalIgnoreCase))
+            return replacingPath;
         return MakeUnique(Root, name);
+    }
+
+    /// <summary>Renames a file inside the Home folder. The manifest is not touched — call
+    /// <see cref="SetPosition"/> afterwards to record the new name for the slot.</summary>
+    public static bool Rename(string oldPath, string newPath, out string error)
+    {
+        error = "";
+        try
+        {
+            File.Move(oldPath, newPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     /// <summary>Reads a box from the manifest, reconciling it with the Home folder first.</summary>
@@ -186,37 +210,21 @@ internal static class HomeStorage
         return Record(Path.GetFileName(path), box, slot, out error);
     }
 
-    /// <summary>Exchanges the recorded positions of two slots of the same box; nothing moves on disk.</summary>
-    public static bool Swap(int box, string pathA, int slotA, string pathB, int slotB, out string error)
-    {
-        var manifest = LoadManifest(out _);
-        manifest.Files[Path.GetFileName(pathA)] = new Entry { Box = box, Slot = slotB };
-        manifest.Files[Path.GetFileName(pathB)] = new Entry { Box = box, Slot = slotA };
-        return SaveManifest(manifest, out error);
-    }
-
-    /// <summary>Exchanges the contents of two boxes (slot numbers kept) — a manifest-only operation.</summary>
-    public static bool SwapBoxes(int boxA, int boxB, out string error)
+    /// <summary>Exchanges the recorded positions of two stored files, whatever boxes they live in
+    /// (a drag between two HOME windows can thus swap slots across boxes); nothing moves on disk.</summary>
+    public static bool SwapPositions(string pathA, string pathB, out string error)
     {
         error = "";
-        if (boxA == boxB)
-            return true;
         var manifest = LoadManifest(out _);
-        bool changed = false;
-        foreach (var entry in manifest.Files.Values)
+        if (!manifest.Files.TryGetValue(Path.GetFileName(pathA), out var entryA)
+            || !manifest.Files.TryGetValue(Path.GetFileName(pathB), out var entryB))
         {
-            if (entry.Box == boxA)
-            {
-                entry.Box = boxB;
-                changed = true;
-            }
-            else if (entry.Box == boxB)
-            {
-                entry.Box = boxA;
-                changed = true;
-            }
+            error = "One of the files is no longer tracked in home.json.";
+            return false;
         }
-        return !changed || SaveManifest(manifest, out error);
+        (entryA.Box, entryB.Box) = (entryB.Box, entryA.Box);
+        (entryA.Slot, entryB.Slot) = (entryB.Slot, entryA.Slot);
+        return SaveManifest(manifest, out error);
     }
 
     /// <summary>Deletes a stored file, refusing anything outside the Home folder. With

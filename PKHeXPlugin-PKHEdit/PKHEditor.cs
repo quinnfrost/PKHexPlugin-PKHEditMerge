@@ -998,13 +998,23 @@ public partial class PKHEditor : Form
         homeForm.Activate();
     }
 
+    /// <summary>Keeps this window's notion of the open file in step when the HOME window renames it
+    /// (an overwrite save gives the file the standard name for the PKH it now holds).</summary>
+    internal void RetargetFile(string oldPath, string newPath)
+    {
+        if (filePath == null || !string.Equals(filePath, oldPath, StringComparison.OrdinalIgnoreCase))
+            return;
+        filePath = newPath;
+        UpdateTitle();
+    }
+
     #endregion
 
     /// <summary>Re-applies names after PKHeX switches display language.</summary>
     public void RefreshNames()
     {
         RefreshAll();
-        homeForm?.RefreshNames(); // slot tooltips carry localized names from the GameInfo tables
+        HomeForm.RefreshAllNames(); // slot tooltips carry localized names from the GameInfo tables
         foreach (var form in compareForms)
             form.RefreshNames();
     }

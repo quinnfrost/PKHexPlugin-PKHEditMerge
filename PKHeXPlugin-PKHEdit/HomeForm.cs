@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -10,10 +12,12 @@ namespace PKHEdit;
 
 /// <summary>
 /// HOME box viewer, laid out like PKHeX's Box Viewer window (SAV_BoxViewer + BoxEditor + PokeGrid):
-/// a toolbar row (swap, ◀, box selector, ▶) over a 6×5 grid drawn on the box wallpaper. All .pkh
+/// a toolbar row (◀, box selector, ▶, +) over a 6×5 grid drawn on the box wallpaper. All .pkh
 /// files live flat under {run dir}/Home; which box and slot a file occupies is recorded in
 /// Home/home.json, and file names stay in PKHeX's standard form. Only .pkh files can be dragged
 /// in or out; right-click / double-click loads a slot into the PKH Editor or saves the editor's PKH there.
+/// "+" opens another window on a different box; every window shares the one Home folder and refreshes
+/// together after any change, so a slot dragged from one window shows up in the other.
 /// </summary>
 internal sealed class HomeForm : Form
 {
@@ -28,9 +32,9 @@ internal sealed class HomeForm : Form
     private const string BaseTitle = "HOME Box Viewer";
 
     private readonly PKHEditor editor;
-    private readonly Button B_BoxSwap;
     private readonly Button B_BoxLeft;
     private readonly Button B_BoxRight;
+    private readonly Button B_NewWindow;
     private readonly ComboBox CB_BoxSelect;
     private readonly Panel BoxPokeGrid;
     private readonly PictureBox[] Slots;
@@ -39,13 +43,18 @@ internal sealed class HomeForm : Form
     private readonly ToolStripMenuItem miLoad;
     private readonly ToolStripMenuItem miSave;
     private readonly ToolStripMenuItem miDelete;
+    private readonly ContextMenuStrip boxMenu;
+
+    // Every open HOME window: storage is shared (one Home folder + home.json), so a change made in one
+    // window has to be reflected in the others.
+    private static readonly List<HomeForm> LiveWindows = [];
 
     private readonly string?[] paths = new string?[HomeStorage.SlotCount];
     private int box;
     private bool loading;
     private Rectangle dragBox = Rectangle.Empty;
 
-    public HomeForm(PKHEditor editor)
+    public HomeForm(PKHEditor editor, int initialBox = 0)
     {
         this.editor = editor;
         Slots = new PictureBox[HomeStorage.SlotCount];
@@ -60,8 +69,11 @@ internal sealed class HomeForm : Form
         menu.Items.Add(miDelete);
         menu.Opening += Menu_Opening;
 
+        // The flat layout keeps every box in the same folder, so right-click offers that folder directly.
+        boxMenu = new ContextMenuStrip();
+        boxMenu.Items.Add(new ToolStripMenuItem("Show in File Explorer", null, (_, _) => OpenHomeFolder()));
+
         // Toolbar positions are BoxEditor's own values after RecenterControls (combo centered on 417px).
-        B_BoxSwap = new Button { Name = "B_BoxSwap", Location = new Point(0, 0), Size = new Size(24, 24), TabStop = false, Text = "⇄" };
         B_BoxLeft = new Button { Name = "B_BoxLeft", Location = new Point(110, 0), Size = new Size(32, 24), Text = "◀" };
         CB_BoxSelect = new ComboBox
         {
@@ -71,8 +83,10 @@ internal sealed class HomeForm : Form
             MinimumSize = new Size(128, 0),
             DropDownStyle = ComboBoxStyle.DropDownList,
             FormattingEnabled = true,
+            ContextMenuStrip = boxMenu,
         };
         B_BoxRight = new Button { Name = "B_BoxRight", Location = new Point(274, 0), Size = new Size(32, 24), Text = "▶" };
+        B_NewWindow = new Button { Name = "B_NewWindow", Location = new Point(GridW - 24, 0), Size = new Size(24, 24), Text = "+" };
         for (int i = 0; i < HomeStorage.BoxCount; i++)
             CB_BoxSelect.Items.Add(HomeStorage.GetBoxName(i));
 
@@ -120,35 +134,38 @@ internal sealed class HomeForm : Form
         StartPosition = FormStartPosition.CenterParent;
         AllowDrop = true;
         ClientSize = new Size(GridW, ToolbarH + GridH); // 417 × 315
-        Controls.AddRange([B_BoxSwap, B_BoxLeft, CB_BoxSelect, B_BoxRight, BoxPokeGrid]);
+        Controls.AddRange([B_BoxLeft, CB_BoxSelect, B_BoxRight, B_NewWindow, BoxPokeGrid]);
         ResumeLayout(false);
 
         CB_BoxSelect.SelectedIndexChanged += (_, _) => { if (!loading) SelectBox(CB_BoxSelect.SelectedIndex); };
         B_BoxLeft.Click += (_, _) => SelectBox((box + HomeStorage.BoxCount - 1) % HomeStorage.BoxCount);
         B_BoxRight.Click += (_, _) => SelectBox((box + 1) % HomeStorage.BoxCount);
-        B_BoxSwap.Click += B_BoxSwap_Click;
+        B_NewWindow.Click += (_, _) => OpenNewWindow();
         DragEnter += OnDragEnter;
         DragOver += OnDragOver;
         DragDrop += OnDragDrop;
         GiveFeedback += (_, e) => e.UseDefaultCursors = false;
         MouseWheel += (_, e) => SelectBox(e.Delta > 0 ? (box + HomeStorage.BoxCount - 1) % HomeStorage.BoxCount : (box + 1) % HomeStorage.BoxCount);
 
-        tip.SetToolTip(B_BoxSwap, "Swap this box's contents with the next box.");
         tip.SetToolTip(B_BoxLeft, "Previous box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_BoxRight, "Next box (wraps around). Scroll wheel works too.");
-        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}");
+        tip.SetToolTip(B_NewWindow, "Open another HOME window on the next box (several can be open at once).");
+        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to show the folder.");
 
-        SelectBox(0);
+        LiveWindows.Add(this);
+        SelectBox(initialBox);
     }
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            LiveWindows.Remove(this);
             foreach (var pb in Slots)
                 pb.Image?.Dispose();
             BoxPokeGrid.BackgroundImage?.Dispose();
             menu.Dispose();
+            boxMenu.Dispose();
             tip.Dispose();
         }
         base.Dispose(disposing);
@@ -187,7 +204,7 @@ internal sealed class HomeForm : Form
             MessageBox.Show(this, $"Can't read \"{Path.GetFileName(path)}\".", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        PkmUtil.DragOutPkh(Slots[index], pkh, $"{box}:{index}");
+        PkmUtil.DragOutPkh(Slots[index], pkh, path); // the tag is the source path, so any window can move it
     }
 
     private void RenderSlot(int index)
@@ -254,15 +271,55 @@ internal sealed class HomeForm : Form
             RenderSlot(i);
     }
 
-    private void B_BoxSwap_Click(object? sender, EventArgs e)
+    /// <summary>Reloads every open HOME window, so all views match the storage after a change.</summary>
+    private static void RefreshAllBoxes()
     {
-        int other = (box + 1) % HomeStorage.BoxCount;
-        if (!HomeStorage.SwapBoxes(box, other, out var error))
+        foreach (var form in LiveWindows.ToArray())
         {
-            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            if (!form.IsDisposed)
+                form.ReloadBox();
         }
-        ReloadBox();
+    }
+
+    /// <summary>Re-applies localized names in every open HOME window.</summary>
+    internal static void RefreshAllNames()
+    {
+        foreach (var form in LiveWindows.ToArray())
+        {
+            if (!form.IsDisposed)
+                form.RefreshNames();
+        }
+    }
+
+    /// <summary>Opens another HOME window on the next box, offset so both stay visible.</summary>
+    private void OpenNewWindow()
+    {
+        var form = new HomeForm(editor, (box + 1) % HomeStorage.BoxCount)
+        {
+            Owner = editor,
+            StartPosition = FormStartPosition.Manual, // otherwise CenterParent would hide this window
+        };
+        var area = Screen.FromControl(this).WorkingArea;
+        var location = new Point(Left + 24, Top + 24);
+        if (!area.Contains(new Rectangle(location, form.Size)))
+            location = new Point(area.Left + 24, area.Top + 24);
+        form.Location = location;
+        form.Show();
+        form.Activate();
+    }
+
+    /// <summary>Shows the folder holding every box file in the system file viewer.</summary>
+    private void OpenHomeFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(HomeStorage.Root);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{HomeStorage.Root}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Couldn't open {HomeStorage.Root}: {ex.Message}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     // Wallpaper comes from PKHeX's own WallpaperUtil (PKHeX.Drawing.Misc, not on NuGet), reached by
@@ -355,17 +412,9 @@ internal sealed class HomeForm : Form
         return col < Cols && row < Rows ? row * Cols + col : -1;
     }
 
-    private static bool ParseTag(string tag, out int srcBox, out int srcSlot)
-    {
-        var parts = tag.Split(':');
-        srcBox = -1;
-        srcSlot = -1;
-        return parts.Length == 2 && int.TryParse(parts[0], out srcBox) && int.TryParse(parts[1], out srcSlot);
-    }
-
     private void HandleDrop(string[] files, string? tag, int target)
     {
-        if (tag != null && ParseTag(tag, out int srcBox, out int srcSlot) && HandleInternalDrop(srcBox, srcSlot, target))
+        if (tag != null && HandleInternalDrop(tag, target))
             return;
 
         string? error = null;
@@ -389,35 +438,43 @@ internal sealed class HomeForm : Form
             }
             target = -1; // remaining files go to the next free slot
         }
-        ReloadBox();
+        RefreshAllBoxes();
         if (error != null)
             MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
-    /// <summary>Moves/swaps a slot of this window onto another slot; returns false to fall back to file handling.</summary>
-    private bool HandleInternalDrop(int srcBox, int srcSlot, int target)
+    /// <summary>True when a drag tag points at a .pkh inside the Home folder, i.e. a slot drag rather
+    /// than an import from the PKH Editor or Explorer.</summary>
+    private static bool IsStoredFile(string path)
     {
-        if (srcBox != box || (uint)srcSlot >= (uint)paths.Length || paths[srcSlot] is not { } srcPath)
-            return false; // can't normally happen mid-drag
-        if (target == srcSlot)
-            return true;
+        if (!path.EndsWith(".pkh", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var root = Path.GetFullPath(HomeStorage.Root) + Path.DirectorySeparatorChar;
+        return Path.GetFullPath(path).StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Moves/swaps a slot dragged out of any HOME window onto a slot of this one; returns
+    /// false when the tag is not a stored slot, so the drop falls back to file handling.</summary>
+    private bool HandleInternalDrop(string sourcePath, int target)
+    {
+        if (!IsStoredFile(sourcePath) || !File.Exists(sourcePath))
+            return false;
         if (target < 0)
             target = FirstEmpty();
-
-        string? error;
         if (target < 0)
         {
-            error = $"{HomeStorage.GetBoxName(box)} is full.";
+            MessageBox.Show(this, $"{HomeStorage.GetBoxName(box)} is full.", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return true;
         }
-        else if (paths[target] is { } dstPath)
-        {
-            error = HomeStorage.Swap(box, srcPath, srcSlot, dstPath, target, out var swapError) ? null : swapError;
-        }
+        if (paths[target] is { } own && string.Equals(own, sourcePath, StringComparison.OrdinalIgnoreCase))
+            return true; // dropped back where it came from
+
+        string? error;
+        if (paths[target] is { } dstPath)
+            error = HomeStorage.SwapPositions(sourcePath, dstPath, out var swapError) ? null : swapError;
         else
-        {
-            error = HomeStorage.SetPosition(srcPath, box, target, out var placeError) ? null : placeError;
-        }
-        ReloadBox();
+            error = HomeStorage.SetPosition(sourcePath, box, target, out var placeError) ? null : placeError;
+        RefreshAllBoxes();
         if (error != null)
             MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         return true;
@@ -460,11 +517,15 @@ internal sealed class HomeForm : Form
     {
         if (editor.CurrentPkh is not { } current)
             return;
-        var path = paths[index] ?? HomeStorage.GetCanonicalPath(box, index, current);
-        if (paths[index] != null
-            && MessageBox.Show(this, $"Replace {Path.GetFileName(path)} with the PKH currently in the editor?", BaseTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        var oldPath = paths[index];
+        // A stored file always carries the standard name for the PKH it holds, so overwriting a slot
+        // renames it instead of keeping the superseded name (an empty slot just gets a fresh name).
+        var path = HomeStorage.GetCanonicalPath(box, index, current, oldPath);
+        if (oldPath != null)
         {
-            return;
+            var rename = string.Equals(oldPath, path, StringComparison.OrdinalIgnoreCase) ? "" : $"\nIt will be saved as \"{Path.GetFileName(path)}\".";
+            if (MessageBox.Show(this, $"Replace \"{Path.GetFileName(oldPath)}\" with the PKH currently in the editor?{rename}", BaseTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
         }
         try
         {
@@ -475,15 +536,31 @@ internal sealed class HomeForm : Form
             MessageBox.Show(this, $"Couldn't create the box folder: {ex.Message}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        if (!PkhService.TrySave(current, path, out var error))
-            MessageBox.Show(this, $"Couldn't save to {HomeStorage.GetBoxName(box)}: {error}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        else
+        // Overwrite the slot in place first: the file then holds the new data even if the rename is
+        // refused, and a failed rename only leaves the old (still accurate) name behind.
+        var savedPath = oldPath ?? path;
+        if (!PkhService.TrySave(current, savedPath, out var error))
         {
-            // Pin the new file to the slot it was saved into; otherwise the next reconcile would only
-            // see an untracked file and hand it the first free slot (which may be a different one).
-            HomeStorage.SetPosition(path, box, index, out _);
-            ReloadBox();
+            MessageBox.Show(this, $"Couldn't save to {HomeStorage.GetBoxName(box)}: {error}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
+        string? warning = null;
+        if (oldPath != null && !string.Equals(oldPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            if (HomeStorage.Rename(oldPath, path, out var renameError))
+                editor.RetargetFile(oldPath, path);
+            else
+            {
+                path = oldPath;
+                warning = $"Saved, but the file couldn't be renamed: {renameError}";
+            }
+        }
+        // Pin the file to the slot it was saved into; otherwise the next reconcile would only see an
+        // untracked file and hand it the first free slot (which may be a different one).
+        HomeStorage.SetPosition(path, box, index, out _);
+        RefreshAllBoxes();
+        if (warning != null)
+            MessageBox.Show(this, warning, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private void DeleteSlot(int index)
@@ -500,7 +577,7 @@ internal sealed class HomeForm : Form
             MessageBox.Show(this, $"Delete failed: {error}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        ReloadBox();
+        RefreshAllBoxes();
     }
 
     #endregion
