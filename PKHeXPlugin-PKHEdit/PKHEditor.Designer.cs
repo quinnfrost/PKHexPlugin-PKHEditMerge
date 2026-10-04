@@ -76,6 +76,7 @@ namespace PKHEdit
             B_Close = new System.Windows.Forms.Button();
             CHK_UseCustomTracker = new System.Windows.Forms.CheckBox();
             B_ClearTracker = new System.Windows.Forms.Button();
+            B_SearchInSave = new System.Windows.Forms.Button();
             toolTip1 = new System.Windows.Forms.ToolTip(components);
             GB_Main.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)PB_Sprite).BeginInit();
@@ -103,6 +104,8 @@ namespace PKHEdit
             GB_Main.Controls.Add(TB_Tracker);
             GB_Main.Controls.Add(B_NewTracker);
             GB_Main.Controls.Add(B_ClearTracker);
+            GB_Main.Controls.Add(B_SearchInSave);
+            GB_Main.Controls.Add(CHK_UseCustomTracker);
             GB_Main.Controls.Add(L_Ids);
             GB_Main.Controls.Add(TC_Info);
             GB_Main.Location = new System.Drawing.Point(8, 8);
@@ -171,6 +174,17 @@ namespace PKHEdit
             B_ClearTracker.UseVisualStyleBackColor = true;
             B_ClearTracker.Click += B_ClearTracker_Click;
             // 
+            // B_SearchInSave
+            // 
+            B_SearchInSave.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
+            B_SearchInSave.Location = new System.Drawing.Point(12, 412);
+            B_SearchInSave.Name = "B_SearchInSave";
+            B_SearchInSave.Size = new System.Drawing.Size(120, 26);
+            B_SearchInSave.TabIndex = 8;
+            B_SearchInSave.Text = "Search in save";
+            B_SearchInSave.UseVisualStyleBackColor = true;
+            B_SearchInSave.Click += B_SearchInSave_Click;
+            // 
             // L_Ids
             // 
             L_Ids.AutoSize = true;
@@ -192,7 +206,7 @@ namespace PKHEdit
             TC_Info.Location = new System.Drawing.Point(12, 116);
             TC_Info.Name = "TC_Info";
             TC_Info.SelectedIndex = 0;
-            TC_Info.Size = new System.Drawing.Size(476, 296);
+            TC_Info.Size = new System.Drawing.Size(476, 290);
             TC_Info.TabIndex = 6;
             // 
             // Tab_Edit
@@ -582,8 +596,8 @@ namespace PKHEdit
             // 
             // CHK_UseCustomTracker
             // 
-            CHK_UseCustomTracker.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            CHK_UseCustomTracker.Location = new System.Drawing.Point(550, 463);
+            CHK_UseCustomTracker.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
+            CHK_UseCustomTracker.Location = new System.Drawing.Point(140, 414);
             CHK_UseCustomTracker.Name = "CHK_UseCustomTracker";
             CHK_UseCustomTracker.Size = new System.Drawing.Size(130, 22);
             CHK_UseCustomTracker.TabIndex = 7;
@@ -604,7 +618,6 @@ namespace PKHEdit
             Controls.Add(B_Home);
             Controls.Add(B_Save);
             Controls.Add(B_Close);
-            Controls.Add(CHK_UseCustomTracker);
             MinimumSize = new System.Drawing.Size(916, 440);
             Name = "PKHEditor";
             Text = "PKH Editor";
@@ -645,6 +658,7 @@ namespace PKHEdit
         private System.Windows.Forms.TextBox TB_Tracker;
         private System.Windows.Forms.Button B_NewTracker;
         private System.Windows.Forms.Button B_ClearTracker;
+        private System.Windows.Forms.Button B_SearchInSave;
         private System.Windows.Forms.Label L_Ids;
         private System.Windows.Forms.TabControl TC_Info;
         private System.Windows.Forms.TabPage Tab_Edit;

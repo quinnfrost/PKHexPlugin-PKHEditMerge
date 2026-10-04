@@ -36,6 +36,8 @@ public partial class PKHEditor : Form
 
     private Rectangle dragBox = Rectangle.Empty;
     private HomeForm? homeForm;
+    private List<(int Box, int Slot)> lastMatches = [];
+    private int lastMatchShown = -1;
 
     public PKHEditor(IPKMView edit, ISaveFileProvider saveProvider)
     {
@@ -63,6 +65,7 @@ public partial class PKHEditor : Form
         toolTip1.SetToolTip(B_Home, "HOME storage: .pkh boxes kept in the Home folder next to PKHeX.");
         toolTip1.SetToolTip(CHK_UseCustomTracker, "On: identity uses the HOME tracker and Gen can make one. Off: no random trackers; identity by EC/ID32/OT fallback (tracker conflicts still warn).");
         toolTip1.SetToolTip(B_ClearTracker, "Clear the HOME tracker (set to 0).");
+        toolTip1.SetToolTip(B_SearchInSave, "Find the PKM in the current save that belong to this PKH (same HOME tracker, or EC/trainer ID/OT). Click again to step through several matches.");
         CHK_UseCustomTracker.Checked = HomeStorage.GetUseCustomTracker(); // restored before the first RefreshAll
         RefreshAll();
     }
@@ -83,6 +86,7 @@ public partial class PKHEditor : Form
             CB_CreateFormat.Enabled = B_CreateVersion.Enabled = has && !readOnly;
             B_Save.Enabled = B_Close.Enabled = has;
             B_ClearTracker.Enabled = has && !readOnly;
+            B_SearchInSave.Enabled = has && saveProvider.SAV.HasBox;
             // Random tracker generation only exists in custom-tracker mode.
             B_NewTracker.Enabled = has && !readOnly && CHK_UseCustomTracker.Checked;
 
@@ -629,6 +633,8 @@ public partial class PKHEditor : Form
         pkh = value;
         filePath = path;
         dirty = isDirty;
+        lastMatches = []; // a new PKH starts a new search
+        lastMatchShown = -1;
         L_Status.Text = status;
         RefreshAll();
     }
@@ -1008,6 +1014,60 @@ public partial class PKHEditor : Form
             return;
         filePath = newPath;
         UpdateTitle();
+    }
+
+    #endregion
+
+    #region Search in save
+
+    // Finds the PKM in the active save that belong to this PKH (the same import identity rules), reports
+    // where they are in the status bar, and selects the first one in PKHeX's box grid; clicking again
+    // steps to the next match.
+    private void B_SearchInSave_Click(object? sender, EventArgs e)
+    {
+        if (pkh is not { } current)
+            return;
+        var sav = saveProvider.SAV;
+        if (!sav.HasBox)
+        {
+            lastMatches = [];
+            L_Status.Text = "Search in save: this save has no boxes.";
+            return;
+        }
+
+        var matches = PkhService.FindMatchingSlots(current, sav, CHK_UseCustomTracker.Checked);
+        // The same result set means another click of the same search: step to the next match. An empty
+        // result never steps (and must not divide by its count).
+        bool sameSet = matches.Count != 0 && lastMatches.SequenceEqual(matches);
+        lastMatchShown = sameSet && lastMatchShown >= 0 ? (lastMatchShown + 1) % matches.Count : 0;
+        lastMatches = matches;
+
+        if (matches.Count == 0)
+        {
+            L_Status.Text = $"Search in save: no PKM in this save's {sav.BoxCount} boxes belongs to this Pokémon.";
+            return;
+        }
+
+        int columns = SaveBoxViewer.GetColumns(saveProvider);
+        var names = BoxUtil.GetBoxNames(sav);
+        var found = string.Join(", ", matches.Take(4).Select(m => DescribeSlot(m, columns, names)));
+        if (matches.Count > 4)
+            found += $" … +{matches.Count - 4}";
+        var step = matches.Count > 1 ? " Click again to step to the next." : "";
+        var selected = SaveBoxViewer.Select(saveProvider, matches[lastMatchShown].Box, matches[lastMatchShown].Slot);
+        L_Status.Text = $"Search in save: found {matches.Count} matching PKM: {found}.{step}{(selected ? "" : " Couldn't select it in PKHeX's box grid.")}";
+    }
+
+    /// <summary>Where a match sits: the save's own box name plus the row/column of PKHeX's live grid
+    /// (which is laid out to fit its panel), or the plain slot number when the grid can't be read.</summary>
+    private static string DescribeSlot((int Box, int Slot) match, int columns, string[] names)
+    {
+        var box = (uint)match.Box < (uint)names.Length && !string.IsNullOrWhiteSpace(names[match.Box])
+            ? names[match.Box]
+            : $"Box {match.Box + 1}";
+        return columns > 0
+            ? $"{box} (row {match.Slot / columns + 1}, col {match.Slot % columns + 1})"
+            : $"{box} slot {match.Slot + 1}";
     }
 
     #endregion

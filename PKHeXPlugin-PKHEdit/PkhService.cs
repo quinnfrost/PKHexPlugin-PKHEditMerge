@@ -410,12 +410,38 @@ internal static class PkhService
     {
         if (stored == null)
             return "The stored file couldn't be read, so it couldn't be compared with the editor's PKH.";
-        return GetIdentity(stored, incoming, customTracker) switch
+        if (IsSameIndividual(stored, incoming, customTracker))
+            return "";
+        return GetIdentity(stored, incoming, customTracker) == Identity.DifferentTracker
+            ? $"HOME tracker differs (stored {stored.Tracker:X16}, editor {(incoming is IHomeTrack t ? t.Tracker : 0):X16}) — this is most likely a different Pokémon."
+            : "EC, trainer ID or OT differ from the stored file — this is most likely a different Pokémon.";
+    }
+
+    /// <summary>Whether <paramref name="pk"/> belongs to the same individual as the PKH, by the import
+    /// identity rules: the same HOME tracker, or the EC/ID32/OT fallback match when a tracker is 0 or
+    /// the custom tracker is off (see <see cref="GetIdentity"/>).</summary>
+    public static bool IsSameIndividual(PKH pkh, PKM pk, bool customTracker) => GetIdentity(pkh, pk, customTracker)
+        is Identity.SameTracker or Identity.MatchedWithoutTracker or Identity.MatchedIncomingTracker or Identity.MatchedPidDiffers;
+
+    /// <summary>Box slots of <paramref name="sav"/> holding the same individual as <paramref name="pkh"/>,
+    /// in box/slot order. Read-only: the save is never modified.</summary>
+    public static List<(int Box, int Slot)> FindMatchingSlots(PKH pkh, SaveFile sav, bool customTracker)
+    {
+        var matches = new List<(int Box, int Slot)>();
+        if (!sav.HasBox)
+            return matches;
+        for (int box = 0; box < sav.BoxCount; box++)
         {
-            Identity.SameTracker or Identity.MatchedWithoutTracker or Identity.MatchedIncomingTracker or Identity.MatchedPidDiffers => "",
-            Identity.DifferentTracker => $"HOME tracker differs (stored {stored.Tracker:X16}, editor {(incoming is IHomeTrack t ? t.Tracker : 0):X16}) — this is most likely a different Pokémon.",
-            _ => "EC, trainer ID or OT differ from the stored file — this is most likely a different Pokémon.",
-        };
+            for (int slot = 0; slot < sav.BoxSlotCount; slot++)
+            {
+                var pk = sav.GetBoxSlotAtIndex(box, slot);
+                if (pk.Species == 0)
+                    continue; // empty slot
+                if (IsSameIndividual(pkh, pk, customTracker))
+                    matches.Add((box, slot));
+            }
+        }
+        return matches;
     }
 
     /// <summary>
