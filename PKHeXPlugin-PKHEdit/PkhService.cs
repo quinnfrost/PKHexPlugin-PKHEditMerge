@@ -85,6 +85,19 @@ internal static class PkhService
             : FallbackPreference.FirstOrDefault(versions.Contains, HomeGameDataFormat.None);
     }
 
+    /// <summary>Format of the version block a PKH's data originally came from (its origin game,
+    /// <see cref="PKM.Version"/>) — the "source version". Mirrors PKH.OriginalGameData's mapping:
+    /// GO/GP/GE→PB7, BD/SP→PB8, PLA→PA8, SL/VL→PK9, ZA→PA9, SW/SH and Gen7-→PK8.</summary>
+    public static HomeGameDataFormat GetOriginFormat(GameVersion version) => version switch
+    {
+        GameVersion.GO or GameVersion.GP or GameVersion.GE => HomeGameDataFormat.PB7,
+        GameVersion.BD or GameVersion.SP => HomeGameDataFormat.PB8,
+        GameVersion.PLA => HomeGameDataFormat.PA8,
+        GameVersion.SL or GameVersion.VL => HomeGameDataFormat.PK9,
+        GameVersion.ZA => HomeGameDataFormat.PA9,
+        _ => HomeGameDataFormat.PK8,
+    };
+
     // PKH.FileNameWithoutExtension throws: PKHeX's namer slices Data up to SIZE_STORED, which exceeds a PKH's buffer.
     public static string GetDefaultFileName(PKH p)
     {
@@ -96,32 +109,71 @@ internal static class PkhService
         return $"{p.Species:0000} - {p.Nickname} - {p.EncryptionConstant:X8}";
     }
 
-    /// <summary>Game tables a version block is numbered in: block IDs always follow that game, not the origin version.</summary>
-    public static (GameVersion Version, EntityContext Context)? GetFormatContext(HomeGameDataFormat format) => format switch
+    /// <summary>The selected version's raw data block on the PKH, or null when that format isn't stored.</summary>
+    public static object? GetVersionBlock(PKH pkh, HomeGameDataFormat format) => format switch
     {
-        HomeGameDataFormat.PB7 => (GameVersion.GP, EntityContext.Gen7b),
-        HomeGameDataFormat.PK8 => (GameVersion.SW, EntityContext.Gen8),
-        HomeGameDataFormat.PA8 => (GameVersion.PLA, EntityContext.Gen8a),
-        HomeGameDataFormat.PB8 => (GameVersion.BD, EntityContext.Gen8b),
-        HomeGameDataFormat.PK9 => (GameVersion.SL, EntityContext.Gen9),
-        HomeGameDataFormat.PA9 => (GameVersion.ZA, EntityContext.Gen9a),
+        HomeGameDataFormat.PB7 => pkh.DataPB7,
+        HomeGameDataFormat.PK8 => pkh.DataPK8,
+        HomeGameDataFormat.PA8 => pkh.DataPA8,
+        HomeGameDataFormat.PB8 => pkh.DataPB8,
+        HomeGameDataFormat.PK9 => pkh.DataPK9,
+        HomeGameDataFormat.PA9 => pkh.DataPA9,
         _ => null,
     };
 
-    /// <summary>Readable place name for a MetLocation/EggLocation ID of a version's block, or null when unknown.</summary>
-    public static string? GetLocationDisplayName(HomeGameDataFormat format, bool eggLocation, string rawValue)
+    // All side-block types, discovered from PKH itself (typed Data* properties) — a new HOME format
+    // added by PKHeX is picked up without touching this file.
+    private static readonly Lazy<Type[]> SideBlockTypes = new(() =>
+        typeof(PKH).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(z => z.PropertyType.Name.StartsWith("GameData", StringComparison.Ordinal)
+                        && z.PropertyType != typeof(GameDataCore))
+            .Select(z => z.PropertyType)
+            .ToArray());
+
+    /// <summary>Per block type: property names declared on no other block and not on the shared core
+    /// (e.g. PA8's GV_*, PB7's AV_* …) — computed structurally, never from a written name list.</summary>
+    private static readonly Lazy<IReadOnlyDictionary<Type, HashSet<string>>> FormatOnlyProperties = new(() =>
     {
-        if (GetFormatContext(format) is not { } ctx || !int.TryParse(rawValue, out var id) || id is <= 0 or > ushort.MaxValue)
+        var core = PropNames(typeof(GameDataCore));
+        var blocks = SideBlockTypes.Value;
+        var result = new Dictionary<Type, HashSet<string>>();
+        foreach (var t in blocks)
+        {
+            var shared = new HashSet<string>(core, StringComparer.Ordinal);
+            foreach (var o in blocks)
+            {
+                if (o != t)
+                    shared.UnionWith(PropNames(o));
+            }
+            var own = PropNames(t);
+            own.ExceptWith(shared);
+            result[t] = own;
+        }
+        return result;
+    });
+
+    private static HashSet<string> PropNames(Type t) =>
+        t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(z => z.Name).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Readable place name via PKHeX's own tables. Both values come from an entity — version = origin,
+    /// context = its current format — exactly how PKHeX itself resolves locations
+    /// (GameInfo.GetLocationList, see EntitySuggestionUtil), so no format/version mapping is
+    /// maintained here: a new HOME format keeps working as soon as PKHeX can export it.
+    /// </summary>
+    public static string? GetLocationDisplayName(GameVersion origin, EntityContext context, bool eggLocation, string rawValue)
+    {
+        if (context == EntityContext.None || !int.TryParse(rawValue, out var id) || id is <= 0 or > ushort.MaxValue)
             return null;
         try
         {
-            foreach (var combo in GameInfo.GetLocationList(ctx.Version, ctx.Context, eggLocation))
+            foreach (var combo in GameInfo.GetLocationList(origin, context, eggLocation))
             {
                 if (combo.Value == id)
                     return combo.Text;
             }
         }
-        catch (Exception) { /* unknown version/context combo — the caller keeps the raw number */ }
+        catch (Exception) { /* unmapped origin/context — the caller keeps the raw number */ }
         return null;
     }
 
@@ -136,9 +188,11 @@ internal static class PkhService
 
     /// <summary>
     /// Readable name for an ID-typed field (Ball/Ability/Move/Met/EggLocation), or null when the key
-    /// has no table, the value doesn't parse, or no format context is available for a location.
+    /// has no table, the value doesn't parse, or no entity context is available for a location.
     /// </summary>
-    public static string? ReadableValue(string key, string raw, HomeGameDataFormat? format)
+    /// <param name="entity">Entity the value belongs to: its Version (origin) and Context select the
+    /// location table, PKHeX-native. Null = no entity, locations keep the raw number.</param>
+    public static string? ReadableValue(string key, string raw, PKM? entity)
     {
         // StatAlignment IS a Nature value (Gen8+ stores it separately; PKHeX itself renders it through
         // Strings.natures — see EntitySummary.Nature), so it shares Nature's table. Both arrive as the
@@ -155,7 +209,7 @@ internal static class PkhService
         if (key == "Ability")
             return id < strings.Ability.Count ? strings.Ability[id] : null;
         if (key is "MetLocation" or "EggLocation")
-            return format is { } f ? GetLocationDisplayName(f, key == "EggLocation", raw) : null;
+            return entity is not null ? GetLocationDisplayName(entity.Version, entity.Context, key == "EggLocation", raw) : null;
         if (IsMoveProp(key))
             return id < strings.Move.Count ? strings.Move[id] : null;
         return null;
@@ -377,6 +431,10 @@ internal static class PkhService
         var coreKeys = AddCoreChanges(items, before, after);
         AddOtherVersionChanges(items, before, after, target, coreKeys);
         AddOwnVersionCheck(items, after, incoming, target);
+        AddTargetVersionChanges(items, before, after, target);
+        // The dialog is shown for every import now; an empty report would leave a blank list.
+        if (items.Count == 0)
+            items.Add(new(ImportSeverity.Info, "Import", "No differences detected — applying will overwrite the PKH with identical data."));
         return new ImportPlan(after, items);
     }
 
@@ -493,7 +551,7 @@ internal static class PkhService
 
     /// <summary>True for a single ribbon/mark flag going from set to unset (not a net total; see <see cref="GetRibbonLossSummary"/>).</summary>
     private static bool IsRibbonFlagLoss(Change c)
-        => (c.Key.StartsWith("Ribbon", StringComparison.Ordinal) || c.Key.StartsWith("HasMark", StringComparison.Ordinal))
+        => c.Key.StartsWith("Ribbon", StringComparison.Ordinal) // also covers marks: they are RibbonMark*
            && c.Before == "True" && c.After == "False";
 
     /// <summary>True for changes that remove existing information: ribbons, marks, markings, memories cleared, or EXP decreased.</summary>
@@ -528,12 +586,12 @@ internal static class PkhService
     private static bool IsCountDecrease(Change c)
         => long.TryParse(c.Before, out var b) && long.TryParse(c.After, out var a) && a < b;
 
-    private static string Describe(Change c, HomeGameDataFormat? format = null) =>
-        $"{c.Key}: {Annotate(c.Key, c.Before, format)} → {Annotate(c.Key, c.After, format)}";
+    private static string Describe(Change c, PKM? entity = null) =>
+        $"{c.Key}: {Annotate(c.Key, c.Before, entity)} → {Annotate(c.Key, c.After, entity)}";
 
     /// <summary>Raw value, with a readable table name in parentheses when the key resolves.</summary>
-    private static string Annotate(string key, string raw, HomeGameDataFormat? format) =>
-        ReadableValue(key, raw, format) is { } name ? $"{Short(raw)} ({name})" : Short(raw);
+    private static string Annotate(string key, string raw, PKM? entity) =>
+        ReadableValue(key, raw, entity) is { } name ? $"{Short(raw)} ({name})" : Short(raw);
 
     private static string Short(string s) => s.Length > 24 ? s[..24] + "…" : s;
 
@@ -597,9 +655,9 @@ internal static class PkhService
             foreach (var c in DiffPkm(a, b))
             {
                 if (SizeKeys.Contains(c.Key))
-                    items.Add(new(ImportSeverity.Confirm, group, Describe(c, format) + " (shared size scalar is overwritten by the imported version's Scale, as HOME does)"));
+                    items.Add(new(ImportSeverity.Confirm, group, Describe(c, a) + " (shared size scalar is overwritten by the imported version's Scale, as HOME does)"));
                 else if (!coreKeys.Contains(c.Key) && !ExportWhitelist.Contains(c.Key))
-                    items.Add(new(ImportSeverity.Confirm, group, Describe(c, format)));
+                    items.Add(new(ImportSeverity.Confirm, group, Describe(c, a)));
             }
         }
     }
@@ -630,15 +688,46 @@ internal static class PkhService
                 var note = c.Key == nameof(PKM.HeldItem)
                     ? " (not stored by HOME / recalculated; returned to the bag on apply unless discarded)"
                     : " (not stored by HOME / recalculated)";
-                items.Add(new(ImportSeverity.Info, group, Describe(c, target) + note));
+                items.Add(new(ImportSeverity.Info, group, Describe(c, incoming) + note));
                 continue;
             }
             if (native != null && ReadDisplay(native, c.Key) == c.After)
             {
-                items.Add(new(ImportSeverity.Info, group, Describe(c, target) + " (PKHeX HOME conversion)"));
+                items.Add(new(ImportSeverity.Info, group, Describe(c, incoming) + " (PKHeX HOME conversion)"));
                 continue;
             }
-            items.Add(new(ImportSeverity.Block, group, Describe(c, target) + " — merging with the existing PKH would change the imported data."));
+            items.Add(new(ImportSeverity.Block, group, Describe(c, incoming) + " — merging with the existing PKH would change the imported data."));
+        }
+    }
+
+    /// <summary>
+    /// 3.2.4: format-specific fields of the target version block that this import overwrote, shown as
+    /// their own Area under the informational section. Emitted only when the PKH already stored that
+    /// version AND something in it changed — block creation stays silent to keep the report small.
+    /// The format-only field set is computed structurally (see FormatOnlyProperties), so new PKHeX
+    /// fields are covered without edits here.
+    /// </summary>
+    private static void AddTargetVersionChanges(List<ImportItem> items, PKH before, PKH after, HomeGameDataFormat target)
+    {
+        if (target == HomeGameDataFormat.None)
+            return;
+        var blockA = GetVersionBlock(before, target);
+        var blockB = GetVersionBlock(after, target);
+        if (blockA is null || blockB is null) // the PKH didn't store this version → nothing was overwritten
+            return;
+        var type = blockA.GetType();
+        if (!FormatOnlyProperties.Value.TryGetValue(type, out var formatOnly) || formatOnly.Count == 0)
+            return;
+
+        var group = $"Version data {target}";
+        foreach (var pi in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!formatOnly.Contains(pi.Name) || !IsStored(pi) || pi.PropertyType.IsByRefLike)
+                continue;
+            var x = pi.GetValue(blockA)?.ToString() ?? "null";
+            var y = pi.GetValue(blockB)?.ToString() ?? "null";
+            if (x != y)
+                items.Add(new(ImportSeverity.Info, group, Describe(new Change(pi.Name, x, y))));
         }
     }
 

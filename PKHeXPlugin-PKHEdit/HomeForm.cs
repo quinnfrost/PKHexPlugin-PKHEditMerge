@@ -53,7 +53,7 @@ internal sealed class HomeForm : Form
         menu = new ContextMenuStrip();
         miLoad = new ToolStripMenuItem("Load into PKH Editor", null, (_, _) => WithSlot(OpenInEditor));
         miSave = new ToolStripMenuItem("Save editor PKH here", null, (_, _) => WithSlot(SaveEditorPkhTo));
-        miDelete = new ToolStripMenuItem("Delete file", null, (_, _) => WithSlot(DeleteSlot));
+        miDelete = new ToolStripMenuItem("Delete file (Shift = skip Recycle Bin)", null, (_, _) => WithSlot(DeleteSlot));
         menu.Items.Add(miLoad);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(miSave);
@@ -490,9 +490,12 @@ internal sealed class HomeForm : Form
     {
         if (paths[index] is not { } path)
             return;
+        // Read the Shift state now, while the menu click is still the foreground action — the
+        // confirmation dialog below moves focus and the modifier could be released by then.
+        bool recycle = (Control.ModifierKeys & Keys.Shift) == 0;
         if (MessageBox.Show(this, $"Delete {Path.GetFileName(path)} from the Home folder?", BaseTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
-        if (!HomeStorage.Delete(path, out var error))
+        if (!HomeStorage.Delete(path, recycle, out var error))
         {
             MessageBox.Show(this, $"Delete failed: {error}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;

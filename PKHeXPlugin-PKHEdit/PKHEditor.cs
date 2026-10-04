@@ -53,6 +53,8 @@ public partial class PKHEditor : Form
         CB_CreateFormat.Items.AddRange(PkhService.ExportFormats.Cast<object>().ToArray());
         if (CB_CreateFormat.Items.Count != 0)
             CB_CreateFormat.SelectedIndex = 0;
+        CB_Gender.Items.AddRange(new object[] { "♂", "♀", "-" }); // Gender byte 0/1/2
+        toolTip1.SetToolTip(NUD_Level, "Level 1-100. Changing it sets EXP to that level's threshold; changing EXP updates the level.");
         DragEnter += OnDragEnter;
         DragDrop += OnDragDrop;
         SetupSpriteDragOut();
@@ -77,7 +79,7 @@ public partial class PKHEditor : Form
             TC_Info.Enabled = has;
             bool readOnly = pkh != null && PkhService.HasPC9(pkh);
             TB_Nickname.ReadOnly = readOnly;
-            NUD_EXP.Enabled = NUD_Friendship.Enabled = CB_Nature.Enabled = TB_Tracker.Enabled = has && !readOnly;
+            NUD_EXP.Enabled = NUD_Level.Enabled = NUD_Friendship.Enabled = CB_Nature.Enabled = CB_StatAlignment.Enabled = CB_Gender.Enabled = TB_Tracker.Enabled = has && !readOnly;
             CB_CreateFormat.Enabled = B_CreateVersion.Enabled = has && !readOnly;
             B_Save.Enabled = B_Close.Enabled = has;
             B_ClearTracker.Enabled = has && !readOnly;
@@ -87,8 +89,9 @@ public partial class PKHEditor : Form
             if (pkh == null)
             {
                 GB_Main.Text = "PKH";
-                TB_Name.Text = TB_Tracker.Text = TB_Nickname.Text = L_Ids.Text = TB_Trainer.Text = TB_Other.Text = TB_VersionInfo.Text = "";
-                L_LevelValue.Text = "-";
+                TB_Name.Text = TB_Tracker.Text = TB_Nickname.Text = L_Ids.Text = TB_VersionInfo.Text = "";
+                TB_Main.Text = TB_Met.Text = TB_Stat.Text = TB_Cosmetic.Text = TB_Other.Text = "";
+                CB_Gender.SelectedIndex = -1;
                 SetSprite(PB_Sprite, null);
                 ClearVersionCards();
                 UpdateTitle();
@@ -103,14 +106,21 @@ public partial class PKHEditor : Form
             TB_Name.Text = PkmUtil.GetDisplayName(pkh);
             TB_Tracker.Text = pkh.Tracker.ToString("X16");
             // PKH.Checksum is always 0 (RefreshChecksum is a no-op on PKH); show the selected version's exported checksum instead.
-            var chk = selected != HomeGameDataFormat.None && PkhService.Export(pkh, selected) is { } chkPk ? PkmUtil.GetFileNameChecksum(chkPk).ToString("X4") : "----";
+            // The sample export also feeds location/ball names (real Version+Context) and the Stats tab's calculated stats.
+            PKM? sample = selected != HomeGameDataFormat.None ? PkhService.Export(pkh, selected) : null;
+            var chk = sample != null ? PkmUtil.GetFileNameChecksum(sample).ToString("X4") : "----";
             L_Ids.Text = $"CHK {chk}   PID {pkh.PID:X8}   EC {pkh.EncryptionConstant:X8}";
             TB_Nickname.Text = pkh.Nickname;
             NUD_EXP.Value = Math.Min(NUD_EXP.Maximum, pkh.EXP);
-            L_LevelValue.Text = pkh.CurrentLevel.ToString(CultureInfo.InvariantCulture);
+            NUD_Level.Value = Math.Clamp((int)pkh.CurrentLevel, 1, 100);
+            CB_Gender.SelectedIndex = pkh.Gender <= 2 ? pkh.Gender : -1;
             CB_Nature.SelectedIndex = (int)pkh.Nature <= (int)Nature.Quirky && (int)pkh.Nature < CB_Nature.Items.Count ? (int)pkh.Nature : -1;
+            CB_StatAlignment.SelectedIndex = (int)pkh.StatAlignment <= (int)Nature.Quirky && (int)pkh.StatAlignment < CB_StatAlignment.Items.Count ? (int)pkh.StatAlignment : -1;
             NUD_Friendship.Value = pkh.CurrentFriendship;
-            TB_Trainer.Text = GetTrainerText(pkh);
+            TB_Main.Text = GetMainText(pkh);
+            TB_Met.Text = GetMetText(pkh, sample);
+            TB_Stat.Text = GetStatText(pkh, sample);
+            TB_Cosmetic.Text = GetCosmeticText(pkh);
             TB_Other.Text = GetOtherText(pkh);
 
             RefreshVersionCards(versions);
@@ -121,51 +131,221 @@ public partial class PKHEditor : Form
         {
             loading = false;
         }
+        AutoUpdateCurrentHandler(); // rule 4: re-judge after (re)selection, import or load; no-op when settled
     }
 
     // Combo holds GameInfo's localized nature names in Nature-enum order, so the selected index IS the
     // enum value. Rebuilt on every refresh; a corrupt index (out-of-range enum) falls back to no selection.
+    // Both Nature and Stat alignment use the same table (StatAlignment is itself a Nature value).
     private void RefreshNatureItems()
     {
         var names = GameInfo.Strings.Natures;
         int count = Math.Min((int)Nature.Quirky + 1, names.Count);
         CB_Nature.Items.Clear();
+        CB_StatAlignment.Items.Clear();
         for (int i = 0; i < count; i++)
+        {
             CB_Nature.Items.Add(names[i]);
+            CB_StatAlignment.Items.Add(names[i]);
+        }
     }
 
-    private static string GetTrainerText(PKH p)
+    /// <summary>Shared/core data only (PKH.Main-page equivalent): no version-block fields here —
+    /// ball, met location and moves live in the per-version data and are shown on Met/Version data.</summary>
+    private static string GetMainText(PKH p)
+    {
+        var sb = new StringBuilder();
+        var speciesTable = GameInfo.Strings.Species;
+        string species = p.Species < speciesTable.Count ? speciesTable[p.Species] : p.Species.ToString(CultureInfo.InvariantCulture);
+        string gender = p.Gender == 0 ? "♂" : p.Gender == 1 ? "♀" : "-";
+        sb.AppendLine($"Species: {species} ({p.Species})   Form: {p.Form}");
+        sb.AppendLine($"Nickname: {p.Nickname}   Nicknamed: {p.IsNicknamed}   Gender: {gender}");
+        sb.AppendLine($"Level: {p.CurrentLevel}   EXP: {p.EXP}   Nature: {NatureName(p.Nature)}   Stat alignment: {NatureName(p.StatAlignment)}");
+        sb.AppendLine($"Held item (HOME): {ItemName(p.HeldItem)}   Language: {LanguageName(p, p.Language)}");
+        sb.AppendLine($"PID: {p.PID:X8}   EC: {p.EncryptionConstant:X8}   Shiny: {p.IsShiny}   Egg: {p.IsEgg}");
+        sb.AppendLine($"Favorite: {p.Favorite}   Bad egg: {p.IsBadEgg}   Form argument: {p.FormArgument}");
+        return sb.ToString();
+    }
+
+    /// <summary>Met-page content. MetLevel/MetDate/Fateful are core (shared); ball/locations live in
+    /// the selected version's block, so they render from the sample export (null = no version data).</summary>
+    private static string GetMetText(PKH p, PKM? sample)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Origin game: {GameInfo.GetVersionName(p.Version)}   Battle version: {BattleVersionName(p.BattleVersion)}");
+        sb.AppendLine($"Met level: {p.MetLevel}   Met date: 20{p.MetYear:00}-{p.MetMonth:00}-{p.MetDay:00}");
+        if (p.EggYear != 0)
+            sb.AppendLine($"Egg date: 20{p.EggYear:00}-{p.EggMonth:00}-{p.EggDay:00}");
+        sb.AppendLine($"Fateful: {p.FatefulEncounter}");
+        if (sample != null)
+        {
+            string ball = PkhService.ReadableValue("Ball", sample.Ball.ToString(CultureInfo.InvariantCulture), sample) ?? sample.Ball.ToString(CultureInfo.InvariantCulture);
+            sb.AppendLine($"Ball: {ball}   Met location: {LocationText("MetLocation", sample.MetLocation, sample)}   Egg location: {LocationText("EggLocation", sample.EggLocation, sample)}");
+        }
+        else
+        {
+            sb.AppendLine("Ball: -   Met location: -   Egg location: - (no version data)");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Stats-page content: IVs/EVs/hyper train are core; calculated stats come from the
+    /// sample export (real PKM implements hyper-train-aware stat calculation; PKH itself does not).</summary>
+    private static string GetStatText(PKH p, PKM? sample)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"IVs: {p.IV_HP}/{p.IV_ATK}/{p.IV_DEF}/{p.IV_SPA}/{p.IV_SPD}/{p.IV_SPE}   Hyper trained: {HyperTrainedText(p)}");
+        sb.AppendLine($"EVs: {p.EV_HP}/{p.EV_ATK}/{p.EV_DEF}/{p.EV_SPA}/{p.EV_SPD}/{p.EV_SPE}");
+        sb.AppendLine($"Current HP: {p.Stat_HPCurrent}   Status: 0x{p.Status_Condition:X8}");
+        if (sample != null)
+        {
+            try
+            {
+                var stats = sample.GetStats(sample.PersonalInfo); // H/A/B/S/C/D
+                sb.AppendLine($"Stats: HP {stats[0]}   ATK {stats[1]}   DEF {stats[2]}   SPA {stats[4]}   SPD {stats[5]}   SPE {stats[3]}");
+            }
+            catch (Exception)
+            {
+                sb.AppendLine("Stats: -"); // unmapped species/form personal entry
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Cosmetic-page content (all core): scale scalars, markings, ribbons/marks, contest.</summary>
+    private static string GetCosmeticText(PKH p)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Height/Weight scalar: {p.HeightScalar} / {p.WeightScalar}");
+        sb.AppendLine($"Markings: 0x{p.MarkingValue:X4}");
+        sb.AppendLine($"Ribbons: {p.RibbonCount}   Marks: {p.MarkCount}");
+        AppendRibbonDetail(sb, p);
+        sb.AppendLine($"Contest: {p.ContestCool}/{p.ContestBeauty}/{p.ContestCute}/{p.ContestSmart}/{p.ContestTough} sheen {p.ContestSheen}");
+        return sb.ToString();
+    }
+
+    private static string LocationText(string key, int raw, PKM? sample)
+    {
+        string id = raw.ToString(CultureInfo.InvariantCulture);
+        return PkhService.ReadableValue(key, id, sample) is { } name ? $"{raw} ({name})" : id;
+    }
+
+    private static string GetOtherText(PKH p)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"OT: {p.OriginalTrainerName} ({(p.OriginalTrainerGender == 0 ? "♂" : "♀")})   ID: {p.DisplayTID:D6} / {p.DisplaySID:D4}");
         sb.AppendLine($"OT friendship: {p.OriginalTrainerFriendship}");
         sb.AppendLine($"OT memory: {p.OriginalTrainerMemory} (intensity {p.OriginalTrainerMemoryIntensity}, feeling {p.OriginalTrainerMemoryFeeling}, var {p.OriginalTrainerMemoryVariable})");
         sb.AppendLine();
-        sb.AppendLine(p.IsUntraded ? "HT: (none)" : $"HT: {p.HandlingTrainerName} ({(p.HandlingTrainerGender == 0 ? "♂" : "♀")}), language {p.HandlingTrainerLanguage}");
+        sb.AppendLine(p.IsUntraded ? "HT: (none)" : $"HT: {p.HandlingTrainerName} ({(p.HandlingTrainerGender == 0 ? "♂" : "♀")}), language {LanguageName(p, p.HandlingTrainerLanguage)}");
         sb.AppendLine($"HT friendship: {p.HandlingTrainerFriendship}   Current handler: {(p.CurrentHandler == 0 ? "OT" : "HT")}");
         sb.AppendLine($"HT memory: {p.HandlingTrainerMemory} (intensity {p.HandlingTrainerMemoryIntensity}, feeling {p.HandlingTrainerMemoryFeeling}, var {p.HandlingTrainerMemoryVariable})");
         sb.AppendLine();
-        sb.AppendLine($"Origin game: {p.Version}   Battle version: {p.BattleVersion}   Language: {(LanguageID)p.Language}");
-        sb.AppendLine($"Met: level {p.MetLevel}, 20{p.MetYear:00}-{p.MetMonth:00}-{p.MetDay:00}");
-        if (p.EggYear != 0)
-            sb.AppendLine($"Egg: 20{p.EggYear:00}-{p.EggMonth:00}-{p.EggDay:00}");
+        sb.AppendLine($"PKH data version: {p.DataVersion}   Stored versions: {string.Join(", ", PkhService.GetVersions(p))}{(PkhService.HasPC9(p) ? ", PC9" : "")}");
         return sb.ToString();
     }
 
-    private static string GetOtherText(PKH p)
+    /// <summary>Localized language name from PKHeX's own table (GameInfo.LanguageDataSource), matched by
+    /// LanguageID value: the entity's generation list first, then the widest list, then the enum name.</summary>
+    private static string LanguageName(PKM p, int language)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine($"IVs: {p.IV_HP}/{p.IV_ATK}/{p.IV_DEF}/{p.IV_SPA}/{p.IV_SPD}/{p.IV_SPE}   Hyper trained: 0x{p.HyperTrainFlags:X2}");
-        sb.AppendLine($"EVs: {p.EV_HP}/{p.EV_ATK}/{p.EV_DEF}/{p.EV_SPA}/{p.EV_SPD}/{p.EV_SPE}");
-        sb.AppendLine($"Gender: {p.Gender}   Form: {p.Form}   Shiny: {p.IsShiny}   Egg: {p.IsEgg}");
-        sb.AppendLine($"Height/Weight scalar: {p.HeightScalar} / {p.WeightScalar}");
-        sb.AppendLine($"Ribbons: {p.RibbonCount}   Marks: {p.MarkCount}   Markings: 0x{p.MarkingValue:X4}");
-        sb.AppendLine($"Contest: {p.ContestCool}/{p.ContestBeauty}/{p.ContestCute}/{p.ContestSmart}/{p.ContestTough} sheen {p.ContestSheen}");
-        sb.AppendLine($"Form argument: {p.FormArgument}   Fateful: {p.FatefulEncounter}");
-        sb.AppendLine($"Held item (HOME): {p.HeldItem}");
-        sb.AppendLine();
-        sb.AppendLine($"PKH data version: {p.DataVersion}   Stored versions: {string.Join(", ", PkhService.GetVersions(p))}{(PkhService.HasPC9(p) ? ", PC9" : "")}");
-        return sb.ToString();
+        if (language == 0)
+            return "-";
+        return FindLanguage(GameInfo.LanguageDataSource(p.Generation, p.Context), language)
+            ?? FindLanguage(GameInfo.LanguageDataSource(9, EntityContext.Gen9a), language)
+            ?? ((LanguageID)language).ToString();
+    }
+
+    private static string? FindLanguage(IReadOnlyList<ComboItem> list, int language)
+    {
+        foreach (var z in list)
+        {
+            if (z.Value == language)
+                return z.Text;
+        }
+        return null;
+    }
+
+    /// <summary>Battle version: GameVersion.Any (= 0) means unset; known ids resolve to display names.</summary>
+    private static string BattleVersionName(GameVersion battleVersion) =>
+        battleVersion == GameVersion.Any ? "-" : GameInfo.GetVersionName(battleVersion);
+
+    /// <summary>Hyper Training ("能力调整") as trained stat names in IV display order; "-" when none.</summary>
+    private static string HyperTrainedText(PKH p)
+    {
+        var list = new List<string>();
+        if (p.HT_HP) list.Add("HP");
+        if (p.HT_ATK) list.Add("ATK");
+        if (p.HT_DEF) list.Add("DEF");
+        if (p.HT_SPA) list.Add("SPA");
+        if (p.HT_SPD) list.Add("SPD");
+        if (p.HT_SPE) list.Add("SPE");
+        return list.Count == 0 ? "-" : string.Join(", ", list);
+    }
+
+    /// <summary>Localized nature name for a StatAlignment value (which is itself a Nature); raw id when unknown.</summary>
+    private static string NatureName(Nature nature)
+    {
+        var names = GameInfo.Strings.Natures;
+        int i = (int)nature;
+        return i >= 0 && i < names.Count ? names[i] : i.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Held item with PKHeX's localized name and id; "-" when none, raw id if outside the table.</summary>
+    private static string ItemName(int item)
+    {
+        if (item == 0)
+            return "-";
+        var items = GameInfo.Strings.Item;
+        return item > 0 && item < items.Count ? $"{items[item]} ({item})" : item.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Lists the ribbons/marks actually set on the PKH with PKHeX's localized names. The flag
+    /// properties live on PKH.Core (GameDataCore implements the IRibbonSet* interfaces; PKH itself only
+    /// forwards the counts, which is why RibbonInfo.GetRibbonInfo(pkh) finds nothing), so they are
+    /// enumerated there with PKHeX's own rules — prefix RibbonInfo.PropertyPrefix, bool = flag,
+    /// byte = counter — and named via RibbonStrings.
+    /// </summary>
+    private static void AppendRibbonDetail(StringBuilder sb, PKH p)
+    {
+        var ribbons = new List<string>();
+        var marks = new List<string>();
+        var counters = new List<string>();
+        try
+        {
+            var core = p.Core;
+            foreach (var pi in core.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!pi.Name.StartsWith(RibbonInfo.PropertyPrefix, StringComparison.Ordinal) || pi.GetIndexParameters().Length != 0)
+                    continue;
+                var value = pi.GetValue(core);
+                if (value is bool flag && flag)
+                {
+                    // SWSH/SV marks live in the same ribbon block — PKHeX names them RibbonMark*.
+                    string display = GameInfo.Strings.Ribbons.GetNameSafe(pi.Name, out var name) ? name : pi.Name;
+                    if (pi.Name.StartsWith("RibbonMark", StringComparison.Ordinal))
+                        marks.Add(display);
+                    else
+                        ribbons.Add(display);
+                }
+                else if (value is byte count && count != 0)
+                {
+                    string display = GameInfo.Strings.Ribbons.GetNameSafe(pi.Name, out var name) ? name : pi.Name;
+                    counters.Add($"{display} {count}");
+                }
+            }
+        }
+        catch (Exception)
+        {
+            return; // counts line above still stands if reflection is unavailable
+        }
+        if (ribbons.Count != 0)
+            sb.AppendLine($"Ribbons ({ribbons.Count}): {string.Join(", ", ribbons)}");
+        if (marks.Count != 0)
+            sb.AppendLine($"Marks ({marks.Count}): {string.Join(", ", marks)}");
+        if (counters.Count != 0)
+            sb.AppendLine($"Ribbon counters: {string.Join(", ", counters)}");
     }
 
     private void UpdateTitle()
@@ -296,6 +476,36 @@ public partial class PKHEditor : Form
     {
         selected = format;
         RefreshSelectedVersion();
+        AutoUpdateCurrentHandler(); // rule 4: auto-judge OT/HT whenever the version selection changes
+    }
+
+    /// <summary>Rule 4 (auto Current Handler): only while the selected version is the source version
+    /// (the block matching the PKH's origin game) is CurrentHandler judged against the main editor's
+    /// save protagonist, using PKHeX's own predicates —
+    /// OT side = TradeOT/BelongsTo in full: origin game + both raw IDs (表ID/里ID, the OT/Misc display
+    /// pair is a lossless view of ID32) + OT gender + OT name all equal → handler = OT (0);
+    /// HT side = IsHandlerSame (HT name+gender equal to the save's OT): the exact TradeHT case that
+    /// sets handler = 1 while leaving HT fields untouched — the complementary TradeHT case would also
+    /// rewrite HT name/lang/gender/friendship/memories, which is out of scope (CurrentHandler only).
+    /// No evidence leaves the imported value untouched; PC9-read-only and no-version states are no-ops.</summary>
+    private void AutoUpdateCurrentHandler()
+    {
+        if (loading || pkh == null || PkhService.HasPC9(pkh))
+            return;
+        if (selected == HomeGameDataFormat.None || selected != PkhService.GetOriginFormat(pkh.Version))
+            return; // not viewing the source version — never touch the field
+        var sav = saveProvider.SAV;
+        byte? desired;
+        if (pkh.Version == sav.Version && pkh.TID16 == sav.TID16 && pkh.SID16 == sav.SID16
+            && pkh.OriginalTrainerGender == sav.Gender && pkh.OriginalTrainerName == sav.OT)
+            desired = 0; // PKHeX BelongsTo → TradeOT concludes OT
+        else if (!pkh.IsUntraded && pkh.HandlingTrainerName == sav.OT && pkh.HandlingTrainerGender == sav.Gender)
+            desired = 1; // PKHeX IsHandlerSame → TradeHT concludes HT (no field rewrite needed)
+        else
+            desired = null; // neither side matches — no evidence, keep the imported value
+        if (desired is not { } target || pkh.CurrentHandler == target)
+            return;
+        Edit(p => p.CurrentHandler = target, $"current handler ({(target == 0 ? "OT" : "HT")})");
     }
 
     // Reconstructs a missing version from whichever stored version is nearest, exactly like PKHeX does when
@@ -336,7 +546,7 @@ public partial class PKHEditor : Form
         foreach (Control c in FLP_Versions.Controls)
             c.BackColor = c.Tag is HomeGameDataFormat f && f == selected ? SystemColors.Highlight : SystemColors.Control;
 
-        if (pkh == null || selected == HomeGameDataFormat.None || GetVersionBlock(pkh, selected) is not { } block)
+        if (pkh == null || selected == HomeGameDataFormat.None || PkhService.GetVersionBlock(pkh, selected) is not { } block)
         {
             GB_VersionInfo.Text = "Version data";
             TB_VersionInfo.Text = pkh != null && PkhService.GetVersions(pkh).Count == 0 ? "This PKH has no game version data." : "";
@@ -345,6 +555,9 @@ public partial class PKHEditor : Form
 
         // Reflect over the version's own data block: every stored field is listed without a
         // per-version field list (same approach as PkhService.DiffCore's GameDataCore loop).
+        // The exported entity is metadata only (origin + context for the location tables) — PKHeX's
+        // own conversion supplies both, so no format/version mapping table is maintained here.
+        var sample = PkhService.Export(pkh, selected);
         GB_VersionInfo.Text = $"Version data: {selected}";
         var sb = new StringBuilder();
         var seen = new HashSet<string>();
@@ -352,24 +565,12 @@ public partial class PKHEditor : Form
         {
             if (!PkhService.IsStored(pi) || pi.PropertyType.IsByRefLike || !seen.Add(pi.Name))
                 continue;
-            sb.AppendLine($"{pi.Name}: {BlockValue(pi, block, selected)}");
+            sb.AppendLine($"{pi.Name}: {BlockValue(pi, block, sample)}");
         }
         TB_VersionInfo.Text = sb.ToString();
     }
 
-    /// <summary>The selected version's raw data block on the PKH, or null when that format isn't stored.</summary>
-    private static object? GetVersionBlock(PKH pkh, HomeGameDataFormat format) => format switch
-    {
-        HomeGameDataFormat.PB7 => pkh.DataPB7,
-        HomeGameDataFormat.PK8 => pkh.DataPK8,
-        HomeGameDataFormat.PA8 => pkh.DataPA8,
-        HomeGameDataFormat.PB8 => pkh.DataPB8,
-        HomeGameDataFormat.PK9 => pkh.DataPK9,
-        HomeGameDataFormat.PA9 => pkh.DataPA9,
-        _ => null,
-    };
-
-    private static string BlockValue(PropertyInfo pi, object block, HomeGameDataFormat format)
+    private static string BlockValue(PropertyInfo pi, object block, PKM? entity)
     {
         // Binary structures show their type instead of a hex dump.
         var type = pi.PropertyType;
@@ -388,7 +589,7 @@ public partial class PKHEditor : Form
         string rawText = value.ToString() ?? "-";
         if (value is 0 && PkhService.IsMoveProp(pi.Name))
             return "-"; // empty Move1..4 / RelearnMove1..4 slot
-        if (PkhService.ReadableValue(pi.Name, rawText, format) is { } name)
+        if (PkhService.ReadableValue(pi.Name, rawText, entity) is { } name)
             return pi.Name is "MetLocation" or "EggLocation" ? $"{rawText} ({name})" : name;
 
         if (value is IFormattable f) // numbers culture-free, enums by name
@@ -510,6 +711,32 @@ public partial class PKHEditor : Form
 
     #region Import
 
+    // One plain (owner-less) Compare window per click — no singleton, so several can be open at
+    // once; open windows are tracked only so RefreshNames can reach them all.
+    private readonly List<FormDiff> compareForms = [];
+
+    internal void ShowCompareWindow(PKM left, PKM right)
+    {
+        var form = new FormDiff(edit, saveProvider);
+        form.FormClosed += (_, _) => compareForms.Remove(form);
+        compareForms.Add(form);
+        form.SetEntities(left, right);
+        form.Show();
+        form.Activate();
+    }
+
+    /// <summary>Left side for Compare: the PKH's data in the incoming format, else the first version the
+    /// PKH actually stores. Export() would synthesize a missing block from core data, so membership in
+    /// GetVersions is checked first (missing version → fall back, never fabricate).</summary>
+    private static PKM? GetCompareLeft(PKH current, PKM incoming)
+    {
+        var target = PKH.GetType(incoming is PK7 ? typeof(PK8) : incoming.GetType());
+        var versions = PkhService.GetVersions(current);
+        if (target != HomeGameDataFormat.None && versions.Contains(target) && PkhService.Export(current, target) is { } same)
+            return same;
+        return versions.Count > 0 && PkhService.Export(current, versions[0]) is { } first ? first : null;
+    }
+
     private void ImportPkm(PKM pk, string source)
     {
         if (pkh == null)
@@ -522,8 +749,9 @@ public partial class PKHEditor : Form
         // Original gate kept below for easy revert: pure PKHeX conversions were applied directly,
         // with the report only in the status tooltip. AlwaysShowImportDialog short-circuits it now.
         bool discardItem = false;
+        var compareLeft = GetCompareLeft(pkh, pk);
         if ((AlwaysShowImportDialog || plan.IsBlocked || plan.NeedsConfirm)
-            && !ImportReportDialog.Confirm(this, plan, $"Import {pk.GetType().Name} from {source}", Font, pk.HeldItem != 0, out discardItem))
+            && !ImportReportDialog.Confirm(this, plan, $"Import {pk.GetType().Name} from {source}", Font, compareLeft, left => ShowCompareWindow(left, pk), pk.HeldItem != 0, out discardItem))
         {
             L_Status.Text = "Import cancelled.";
             return;
@@ -657,7 +885,39 @@ public partial class PKHEditor : Form
     {
         if (pkh == null || (uint)NUD_EXP.Value == pkh.EXP)
             return;
+        // RefreshAll recomputes the Level NUD from CurrentLevel — one edit, both fields in sync.
         Edit(p => p.EXP = (uint)NUD_EXP.Value, "EXP");
+    }
+
+    // EXP ↔ Level linkage: level changes write the EXP threshold for that level (clamped 1..100 by
+    // the NUD bounds), EXP changes re-derive the level. Growth rate comes from the personal info.
+    private void NUD_Level_ValueChanged(object? sender, EventArgs e)
+    {
+        if (loading || pkh == null || (byte)NUD_Level.Value == pkh.CurrentLevel)
+            return;
+        byte level = (byte)NUD_Level.Value;
+        uint exp;
+        try { exp = Experience.GetEXP(level, pkh.PersonalInfo.EXPGrowth); }
+        catch (Exception) { return; } // no personal entry for species/form — keep the old EXP
+        Edit(p => p.EXP = exp, $"level {level}");
+    }
+
+    private void CB_Gender_SelectionChangeCommitted(object? sender, EventArgs e)
+    {
+        // Items are ♂/♀/- in Gender-byte order (0/1/2); out-of-range values show as no selection.
+        if (loading || pkh == null || CB_Gender.SelectedIndex is < 0 or > 2 || (byte)CB_Gender.SelectedIndex == pkh.Gender)
+            return;
+        byte gender = (byte)CB_Gender.SelectedIndex;
+        Edit(p => p.Gender = gender, "gender");
+    }
+
+    private void CB_StatAlignment_SelectionChangeCommitted(object? sender, EventArgs e)
+    {
+        // StatAlignment is stored as a Nature value; same index-is-enum rule as CB_Nature.
+        if (loading || pkh == null || (uint)CB_StatAlignment.SelectedIndex > (uint)Nature.Quirky || (Nature)CB_StatAlignment.SelectedIndex == pkh.StatAlignment)
+            return;
+        var n = (Nature)CB_StatAlignment.SelectedIndex;
+        Edit(p => p.StatAlignment = n, "stat alignment");
     }
 
     private void CB_Nature_SelectionChangeCommitted(object? sender, EventArgs e)
@@ -745,5 +1005,7 @@ public partial class PKHEditor : Form
     {
         RefreshAll();
         homeForm?.RefreshNames(); // slot tooltips carry localized names from the GameInfo tables
+        foreach (var form in compareForms)
+            form.RefreshNames();
     }
 }

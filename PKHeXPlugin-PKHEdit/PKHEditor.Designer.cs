@@ -37,20 +37,30 @@ namespace PKHEdit
             B_NewTracker = new System.Windows.Forms.Button();
             L_Ids = new System.Windows.Forms.Label();
             TC_Info = new System.Windows.Forms.TabControl();
-            Tab_Main = new System.Windows.Forms.TabPage();
-            TLP_Main = new System.Windows.Forms.TableLayoutPanel();
+            Tab_Edit = new System.Windows.Forms.TabPage();
+            TLP_Edit = new System.Windows.Forms.TableLayoutPanel();
             L_Nickname = new System.Windows.Forms.Label();
             TB_Nickname = new System.Windows.Forms.TextBox();
+            L_Gender = new System.Windows.Forms.Label();
+            CB_Gender = new System.Windows.Forms.ComboBox();
             L_EXP = new System.Windows.Forms.Label();
             NUD_EXP = new System.Windows.Forms.NumericUpDown();
             L_Level = new System.Windows.Forms.Label();
-            L_LevelValue = new System.Windows.Forms.Label();
+            NUD_Level = new System.Windows.Forms.NumericUpDown();
             L_Nature = new System.Windows.Forms.Label();
             CB_Nature = new System.Windows.Forms.ComboBox();
+            L_StatAlignment = new System.Windows.Forms.Label();
+            CB_StatAlignment = new System.Windows.Forms.ComboBox();
             L_Friendship = new System.Windows.Forms.Label();
             NUD_Friendship = new System.Windows.Forms.NumericUpDown();
-            Tab_Trainer = new System.Windows.Forms.TabPage();
-            TB_Trainer = new System.Windows.Forms.TextBox();
+            Tab_Main = new System.Windows.Forms.TabPage();
+            TB_Main = new System.Windows.Forms.TextBox();
+            Tab_Met = new System.Windows.Forms.TabPage();
+            TB_Met = new System.Windows.Forms.TextBox();
+            Tab_Stat = new System.Windows.Forms.TabPage();
+            TB_Stat = new System.Windows.Forms.TextBox();
+            Tab_Cosmetic = new System.Windows.Forms.TabPage();
+            TB_Cosmetic = new System.Windows.Forms.TextBox();
             Tab_Other = new System.Windows.Forms.TabPage();
             TB_Other = new System.Windows.Forms.TextBox();
             GB_Versions = new System.Windows.Forms.GroupBox();
@@ -70,11 +80,15 @@ namespace PKHEdit
             GB_Main.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)PB_Sprite).BeginInit();
             TC_Info.SuspendLayout();
-            Tab_Main.SuspendLayout();
-            TLP_Main.SuspendLayout();
+            Tab_Edit.SuspendLayout();
+            TLP_Edit.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)NUD_EXP).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)NUD_Level).BeginInit();
             ((System.ComponentModel.ISupportInitialize)NUD_Friendship).BeginInit();
-            Tab_Trainer.SuspendLayout();
+            Tab_Main.SuspendLayout();
+            Tab_Met.SuspendLayout();
+            Tab_Stat.SuspendLayout();
+            Tab_Cosmetic.SuspendLayout();
             Tab_Other.SuspendLayout();
             GB_Versions.SuspendLayout();
             GB_VersionInfo.SuspendLayout();
@@ -169,8 +183,11 @@ namespace PKHEdit
             // TC_Info
             // 
             TC_Info.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            TC_Info.Controls.Add(Tab_Edit);
             TC_Info.Controls.Add(Tab_Main);
-            TC_Info.Controls.Add(Tab_Trainer);
+            TC_Info.Controls.Add(Tab_Met);
+            TC_Info.Controls.Add(Tab_Stat);
+            TC_Info.Controls.Add(Tab_Cosmetic);
             TC_Info.Controls.Add(Tab_Other);
             TC_Info.Location = new System.Drawing.Point(12, 116);
             TC_Info.Name = "TC_Info";
@@ -178,44 +195,49 @@ namespace PKHEdit
             TC_Info.Size = new System.Drawing.Size(476, 296);
             TC_Info.TabIndex = 6;
             // 
-            // Tab_Main
+            // Tab_Edit
             // 
-            Tab_Main.Controls.Add(TLP_Main);
-            Tab_Main.Location = new System.Drawing.Point(4, 26);
-            Tab_Main.Name = "Tab_Main";
-            Tab_Main.Padding = new System.Windows.Forms.Padding(6);
-            Tab_Main.Size = new System.Drawing.Size(468, 266);
-            Tab_Main.TabIndex = 0;
-            Tab_Main.Text = "Main";
-            Tab_Main.UseVisualStyleBackColor = true;
+            Tab_Edit.Controls.Add(TLP_Edit);
+            Tab_Edit.Location = new System.Drawing.Point(4, 26);
+            Tab_Edit.Name = "Tab_Edit";
+            Tab_Edit.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Edit.Size = new System.Drawing.Size(468, 266);
+            Tab_Edit.TabIndex = 0;
+            Tab_Edit.Text = "Edit";
+            Tab_Edit.UseVisualStyleBackColor = true;
             // 
-            // TLP_Main
+            // TLP_Edit
             // 
-            TLP_Main.ColumnCount = 2;
-            TLP_Main.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
-            TLP_Main.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            TLP_Main.Controls.Add(L_Nickname, 0, 0);
-            TLP_Main.Controls.Add(TB_Nickname, 1, 0);
-            TLP_Main.Controls.Add(L_EXP, 0, 1);
-            TLP_Main.Controls.Add(NUD_EXP, 1, 1);
-            TLP_Main.Controls.Add(L_Level, 0, 2);
-            TLP_Main.Controls.Add(L_LevelValue, 1, 2);
-            TLP_Main.Controls.Add(L_Nature, 0, 3);
-            TLP_Main.Controls.Add(CB_Nature, 1, 3);
-            TLP_Main.Controls.Add(L_Friendship, 0, 4);
-            TLP_Main.Controls.Add(NUD_Friendship, 1, 4);
-            TLP_Main.Dock = System.Windows.Forms.DockStyle.Fill;
-            TLP_Main.Location = new System.Drawing.Point(6, 6);
-            TLP_Main.Name = "TLP_Main";
-            TLP_Main.RowCount = 6;
-            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
-            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
-            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
-            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
-            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 32F));
-            TLP_Main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            TLP_Main.Size = new System.Drawing.Size(416, 258);
-            TLP_Main.TabIndex = 0;
+            TLP_Edit.ColumnCount = 4;
+            TLP_Edit.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 90F));
+            TLP_Edit.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            TLP_Edit.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 105F));
+            TLP_Edit.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            TLP_Edit.Controls.Add(L_Nickname, 0, 0);
+            TLP_Edit.Controls.Add(TB_Nickname, 1, 0);
+            TLP_Edit.Controls.Add(L_Gender, 2, 0);
+            TLP_Edit.Controls.Add(CB_Gender, 3, 0);
+            TLP_Edit.Controls.Add(L_EXP, 0, 1);
+            TLP_Edit.Controls.Add(NUD_EXP, 1, 1);
+            TLP_Edit.Controls.Add(L_Level, 2, 1);
+            TLP_Edit.Controls.Add(NUD_Level, 3, 1);
+            TLP_Edit.Controls.Add(L_Nature, 0, 2);
+            TLP_Edit.Controls.Add(CB_Nature, 1, 2);
+            TLP_Edit.Controls.Add(L_StatAlignment, 2, 2);
+            TLP_Edit.Controls.Add(CB_StatAlignment, 3, 2);
+            TLP_Edit.Controls.Add(L_Friendship, 0, 3);
+            TLP_Edit.Controls.Add(NUD_Friendship, 1, 3);
+            TLP_Edit.Dock = System.Windows.Forms.DockStyle.Fill;
+            TLP_Edit.Location = new System.Drawing.Point(6, 6);
+            TLP_Edit.Name = "TLP_Edit";
+            TLP_Edit.RowCount = 5;
+            TLP_Edit.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
+            TLP_Edit.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
+            TLP_Edit.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
+            TLP_Edit.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
+            TLP_Edit.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            TLP_Edit.Size = new System.Drawing.Size(456, 254);
+            TLP_Edit.TabIndex = 0;
             // 
             // L_Nickname
             // 
@@ -250,6 +272,23 @@ namespace PKHEdit
             NUD_EXP.TabIndex = 3;
             NUD_EXP.ValueChanged += NUD_EXP_ValueChanged;
             // 
+            // L_Gender
+            // 
+            L_Gender.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_Gender.AutoSize = true;
+            L_Gender.Name = "L_Gender";
+            L_Gender.TabIndex = 10;
+            L_Gender.Text = "Gender:";
+            // 
+            // CB_Gender
+            // 
+            CB_Gender.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            CB_Gender.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            CB_Gender.Name = "CB_Gender";
+            CB_Gender.Size = new System.Drawing.Size(90, 25);
+            CB_Gender.TabIndex = 11;
+            CB_Gender.SelectionChangeCommitted += CB_Gender_SelectionChangeCommitted;
+            // 
             // L_Level
             // 
             L_Level.Anchor = System.Windows.Forms.AnchorStyles.Left;
@@ -258,13 +297,17 @@ namespace PKHEdit
             L_Level.TabIndex = 4;
             L_Level.Text = "Level:";
             // 
-            // L_LevelValue
+            // NUD_Level
             // 
-            L_LevelValue.Anchor = System.Windows.Forms.AnchorStyles.Left;
-            L_LevelValue.AutoSize = true;
-            L_LevelValue.Name = "L_LevelValue";
-            L_LevelValue.TabIndex = 5;
-            L_LevelValue.Text = "-";
+            NUD_Level.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            NUD_Level.Location = new System.Drawing.Point(0, 0);
+            NUD_Level.Maximum = new decimal(new int[] { 100, 0, 0, 0 });
+            NUD_Level.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            NUD_Level.Name = "NUD_Level";
+            NUD_Level.Size = new System.Drawing.Size(70, 23);
+            NUD_Level.TabIndex = 12;
+            NUD_Level.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            NUD_Level.ValueChanged += NUD_Level_ValueChanged;
             // 
             // L_Nature
             // 
@@ -279,9 +322,26 @@ namespace PKHEdit
             CB_Nature.Anchor = System.Windows.Forms.AnchorStyles.Left;
             CB_Nature.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             CB_Nature.Name = "CB_Nature";
-            CB_Nature.Size = new System.Drawing.Size(160, 25);
+            CB_Nature.Size = new System.Drawing.Size(125, 25);
             CB_Nature.TabIndex = 7;
             CB_Nature.SelectionChangeCommitted += CB_Nature_SelectionChangeCommitted;
+            // 
+            // L_StatAlignment
+            // 
+            L_StatAlignment.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            L_StatAlignment.AutoSize = true;
+            L_StatAlignment.Name = "L_StatAlignment";
+            L_StatAlignment.TabIndex = 13;
+            L_StatAlignment.Text = "Stat alignment:";
+            // 
+            // CB_StatAlignment
+            // 
+            CB_StatAlignment.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            CB_StatAlignment.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            CB_StatAlignment.Name = "CB_StatAlignment";
+            CB_StatAlignment.Size = new System.Drawing.Size(130, 25);
+            CB_StatAlignment.TabIndex = 14;
+            CB_StatAlignment.SelectionChangeCommitted += CB_StatAlignment_SelectionChangeCommitted;
             // 
             // L_Friendship
             // 
@@ -300,26 +360,89 @@ namespace PKHEdit
             NUD_Friendship.TabIndex = 9;
             NUD_Friendship.ValueChanged += NUD_Friendship_ValueChanged;
             // 
-            // Tab_Trainer
+            // Tab_Main
             // 
-            Tab_Trainer.Controls.Add(TB_Trainer);
-            Tab_Trainer.Location = new System.Drawing.Point(4, 26);
-            Tab_Trainer.Name = "Tab_Trainer";
-            Tab_Trainer.Padding = new System.Windows.Forms.Padding(6);
-            Tab_Trainer.Size = new System.Drawing.Size(468, 266);
-            Tab_Trainer.TabIndex = 1;
-            Tab_Trainer.Text = "Trainer";
-            Tab_Trainer.UseVisualStyleBackColor = true;
+            Tab_Main.Controls.Add(TB_Main);
+            Tab_Main.Location = new System.Drawing.Point(4, 26);
+            Tab_Main.Name = "Tab_Main";
+            Tab_Main.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Main.Size = new System.Drawing.Size(468, 266);
+            Tab_Main.TabIndex = 1;
+            Tab_Main.Text = "Main";
+            Tab_Main.UseVisualStyleBackColor = true;
             // 
-            // TB_Trainer
+            // TB_Main
             // 
-            TB_Trainer.Dock = System.Windows.Forms.DockStyle.Fill;
-            TB_Trainer.Multiline = true;
-            TB_Trainer.Name = "TB_Trainer";
-            TB_Trainer.ReadOnly = true;
-            TB_Trainer.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            TB_Trainer.TabIndex = 0;
-            TB_Trainer.TabStop = false;
+            TB_Main.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_Main.Multiline = true;
+            TB_Main.Name = "TB_Main";
+            TB_Main.ReadOnly = true;
+            TB_Main.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_Main.TabIndex = 0;
+            TB_Main.TabStop = false;
+            // 
+            // Tab_Met
+            // 
+            Tab_Met.Controls.Add(TB_Met);
+            Tab_Met.Location = new System.Drawing.Point(4, 26);
+            Tab_Met.Name = "Tab_Met";
+            Tab_Met.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Met.Size = new System.Drawing.Size(468, 266);
+            Tab_Met.TabIndex = 2;
+            Tab_Met.Text = "Met";
+            Tab_Met.UseVisualStyleBackColor = true;
+            // 
+            // TB_Met
+            // 
+            TB_Met.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_Met.Multiline = true;
+            TB_Met.Name = "TB_Met";
+            TB_Met.ReadOnly = true;
+            TB_Met.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_Met.TabIndex = 0;
+            TB_Met.TabStop = false;
+            // 
+            // Tab_Stat
+            // 
+            Tab_Stat.Controls.Add(TB_Stat);
+            Tab_Stat.Location = new System.Drawing.Point(4, 26);
+            Tab_Stat.Name = "Tab_Stat";
+            Tab_Stat.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Stat.Size = new System.Drawing.Size(468, 266);
+            Tab_Stat.TabIndex = 3;
+            Tab_Stat.Text = "Stat";
+            Tab_Stat.UseVisualStyleBackColor = true;
+            // 
+            // TB_Stat
+            // 
+            TB_Stat.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_Stat.Multiline = true;
+            TB_Stat.Name = "TB_Stat";
+            TB_Stat.ReadOnly = true;
+            TB_Stat.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_Stat.TabIndex = 0;
+            TB_Stat.TabStop = false;
+            // 
+            // Tab_Cosmetic
+            // 
+            Tab_Cosmetic.Controls.Add(TB_Cosmetic);
+            Tab_Cosmetic.Location = new System.Drawing.Point(4, 26);
+            Tab_Cosmetic.Name = "Tab_Cosmetic";
+            Tab_Cosmetic.Padding = new System.Windows.Forms.Padding(6);
+            Tab_Cosmetic.Size = new System.Drawing.Size(468, 266);
+            Tab_Cosmetic.TabIndex = 4;
+            Tab_Cosmetic.Text = "Cosmetic";
+            Tab_Cosmetic.UseVisualStyleBackColor = true;
+            // 
+            // TB_Cosmetic
+            // 
+            TB_Cosmetic.Dock = System.Windows.Forms.DockStyle.Fill;
+            TB_Cosmetic.Multiline = true;
+            TB_Cosmetic.Name = "TB_Cosmetic";
+            TB_Cosmetic.ReadOnly = true;
+            TB_Cosmetic.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            TB_Cosmetic.TabIndex = 0;
+            TB_Cosmetic.TabStop = false;
             // 
             // Tab_Other
             // 
@@ -328,7 +451,7 @@ namespace PKHEdit
             Tab_Other.Name = "Tab_Other";
             Tab_Other.Padding = new System.Windows.Forms.Padding(6);
             Tab_Other.Size = new System.Drawing.Size(468, 266);
-            Tab_Other.TabIndex = 2;
+            Tab_Other.TabIndex = 5;
             Tab_Other.Text = "Other";
             Tab_Other.UseVisualStyleBackColor = true;
             // 
@@ -419,7 +542,7 @@ namespace PKHEdit
             L_Status.AutoEllipsis = true;
             L_Status.Location = new System.Drawing.Point(8, 456);
             L_Status.Name = "L_Status";
-            L_Status.Size = new System.Drawing.Size(554, 36);
+            L_Status.Size = new System.Drawing.Size(534, 36);
             L_Status.TabIndex = 3;
             L_Status.Text = "Drop a .pkh file to open it, or a PKM file to create or update a PKH. Drag the sprite out to export.";
             L_Status.TextAlign = System.Drawing.ContentAlignment.TopLeft;
@@ -438,29 +561,29 @@ namespace PKHEdit
             // B_Save
             // 
             B_Save.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            B_Save.Location = new System.Drawing.Point(708, 460);
+            B_Save.Location = new System.Drawing.Point(688, 460);
             B_Save.Name = "B_Save";
             B_Save.Size = new System.Drawing.Size(70, 28);
             B_Save.TabIndex = 5;
-            B_Save.Text = "Save";
+            B_Save.Text = "Save As";
             B_Save.UseVisualStyleBackColor = true;
             B_Save.Click += B_Save_Click;
             // 
             // B_Close
             // 
             B_Close.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            B_Close.Location = new System.Drawing.Point(786, 460);
+            B_Close.Location = new System.Drawing.Point(766, 460);
             B_Close.Name = "B_Close";
-            B_Close.Size = new System.Drawing.Size(70, 28);
+            B_Close.Size = new System.Drawing.Size(90, 28);
             B_Close.TabIndex = 6;
-            B_Close.Text = "Close";
+            B_Close.Text = "Close File";
             B_Close.UseVisualStyleBackColor = true;
             B_Close.Click += B_CloseFile_Click;
             // 
             // CHK_UseCustomTracker
             // 
             CHK_UseCustomTracker.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            CHK_UseCustomTracker.Location = new System.Drawing.Point(570, 463);
+            CHK_UseCustomTracker.Location = new System.Drawing.Point(550, 463);
             CHK_UseCustomTracker.Name = "CHK_UseCustomTracker";
             CHK_UseCustomTracker.Size = new System.Drawing.Size(130, 22);
             CHK_UseCustomTracker.TabIndex = 7;
@@ -490,13 +613,20 @@ namespace PKHEdit
             GB_Main.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)PB_Sprite).EndInit();
             TC_Info.ResumeLayout(false);
-            Tab_Main.ResumeLayout(false);
-            TLP_Main.ResumeLayout(false);
-            TLP_Main.PerformLayout();
+            Tab_Edit.ResumeLayout(false);
+            TLP_Edit.ResumeLayout(false);
+            TLP_Edit.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)NUD_EXP).EndInit();
+            ((System.ComponentModel.ISupportInitialize)NUD_Level).EndInit();
             ((System.ComponentModel.ISupportInitialize)NUD_Friendship).EndInit();
-            Tab_Trainer.ResumeLayout(false);
-            Tab_Trainer.PerformLayout();
+            Tab_Main.ResumeLayout(false);
+            Tab_Main.PerformLayout();
+            Tab_Met.ResumeLayout(false);
+            Tab_Met.PerformLayout();
+            Tab_Stat.ResumeLayout(false);
+            Tab_Stat.PerformLayout();
+            Tab_Cosmetic.ResumeLayout(false);
+            Tab_Cosmetic.PerformLayout();
             Tab_Other.ResumeLayout(false);
             Tab_Other.PerformLayout();
             GB_Versions.ResumeLayout(false);
@@ -517,20 +647,30 @@ namespace PKHEdit
         private System.Windows.Forms.Button B_ClearTracker;
         private System.Windows.Forms.Label L_Ids;
         private System.Windows.Forms.TabControl TC_Info;
-        private System.Windows.Forms.TabPage Tab_Main;
-        private System.Windows.Forms.TableLayoutPanel TLP_Main;
+        private System.Windows.Forms.TabPage Tab_Edit;
+        private System.Windows.Forms.TableLayoutPanel TLP_Edit;
         private System.Windows.Forms.Label L_Nickname;
         private System.Windows.Forms.TextBox TB_Nickname;
+        private System.Windows.Forms.Label L_Gender;
+        private System.Windows.Forms.ComboBox CB_Gender;
         private System.Windows.Forms.Label L_EXP;
         private System.Windows.Forms.NumericUpDown NUD_EXP;
         private System.Windows.Forms.Label L_Level;
-        private System.Windows.Forms.Label L_LevelValue;
+        private System.Windows.Forms.NumericUpDown NUD_Level;
         private System.Windows.Forms.Label L_Nature;
         private System.Windows.Forms.ComboBox CB_Nature;
+        private System.Windows.Forms.Label L_StatAlignment;
+        private System.Windows.Forms.ComboBox CB_StatAlignment;
         private System.Windows.Forms.Label L_Friendship;
         private System.Windows.Forms.NumericUpDown NUD_Friendship;
-        private System.Windows.Forms.TabPage Tab_Trainer;
-        private System.Windows.Forms.TextBox TB_Trainer;
+        private System.Windows.Forms.TabPage Tab_Main;
+        private System.Windows.Forms.TextBox TB_Main;
+        private System.Windows.Forms.TabPage Tab_Met;
+        private System.Windows.Forms.TextBox TB_Met;
+        private System.Windows.Forms.TabPage Tab_Stat;
+        private System.Windows.Forms.TextBox TB_Stat;
+        private System.Windows.Forms.TabPage Tab_Cosmetic;
+        private System.Windows.Forms.TextBox TB_Cosmetic;
         private System.Windows.Forms.TabPage Tab_Other;
         private System.Windows.Forms.TextBox TB_Other;
         private System.Windows.Forms.GroupBox GB_Versions;

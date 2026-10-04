@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using PKHeX.Core;
 
@@ -218,8 +219,10 @@ internal static class HomeStorage
         return !changed || SaveManifest(manifest, out error);
     }
 
-    /// <summary>Deletes a stored file, refusing anything outside the Home folder.</summary>
-    public static bool Delete(string path, out string error)
+    /// <summary>Deletes a stored file, refusing anything outside the Home folder. With
+    /// <paramref name="recycle"/> the file is first sent to the Recycle Bin; if no bin is available
+    /// (disabled/unsupported/too large) it is deleted directly instead.</summary>
+    public static bool Delete(string path, bool recycle, out string error)
     {
         error = "";
         try
@@ -231,7 +234,10 @@ internal static class HomeStorage
                 error = "Refusing to delete a file outside the Home folder.";
                 return false;
             }
-            File.Delete(full);
+            if (recycle)
+                TryMoveToRecycleBin(full);
+            if (File.Exists(full)) // Shift-delete, or the Recycle Bin refused/unavailable
+                File.Delete(full);
             var manifest = LoadManifest(out _);
             if (manifest.Files.Remove(Path.GetFileName(full)))
                 SaveManifest(manifest, out _); // a stale entry would be pruned on the next load anyway
@@ -241,6 +247,51 @@ internal static class HomeStorage
         {
             error = ex.Message;
             return false;
+        }
+    }
+
+    // --- Recycle Bin (FOF_ALLOWUNDO), fully silent: any refusal leaves the file for the direct delete ---
+
+    private const uint FO_DELETE = 0x0003;
+    private const ushort FOF_SILENT = 0x0004;
+    private const ushort FOF_NOCONFIRMATION = 0x0010;
+    private const ushort FOF_ALLOWUNDO = 0x0040; // use the Recycle Bin instead of erasing
+    private const ushort FOF_NOERRORUI = 0x0400;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct SHFILEOPSTRUCTW
+    {
+        public IntPtr hwnd;
+        public uint wFunc;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pFrom;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pTo;
+        public ushort fFlags;
+        [MarshalAs(UnmanagedType.Bool)] public bool fAnyOperationsAborted;
+        public IntPtr hNameMappings;
+        [MarshalAs(UnmanagedType.LPWStr)] public string lpszProgressTitle;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHFileOperation(ref SHFILEOPSTRUCTW lpFileOp);
+
+    /// <summary>Best-effort move to the Recycle Bin; leaves the file untouched when the shell refuses
+    /// (bin disabled, too large, unsupported volume) so the caller can delete it directly.</summary>
+    private static void TryMoveToRecycleBin(string path)
+    {
+        try
+        {
+            var op = new SHFILEOPSTRUCTW
+            {
+                wFunc = FO_DELETE,
+                pFrom = path + "\0", // the marshaller adds the terminator → path\0\0, a single-item list
+                pTo = string.Empty,
+                fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+            };
+            SHFileOperation(ref op);
+        }
+        catch (Exception)
+        {
+            // shell unavailable — the caller falls back to a direct delete
         }
     }
 
