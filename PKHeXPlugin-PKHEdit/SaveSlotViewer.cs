@@ -8,13 +8,14 @@ using PKHeX.Core;
 namespace PKHEdit;
 
 /// <summary>
-/// Reaches PKHeX's box grid to select a slot. The <see cref="ISaveFileProvider"/> plugins receive is
+/// Reaches PKHeX's save view to select a slot. The <see cref="ISaveFileProvider"/> plugins receive is
 /// PKHeX's own SAVEditor control (SAVEditor : UserControl, ISaveFileProvider), so its public Box field and
 /// the PokeGrid behind it are one reflection hop away — no need to hunt down the main window. Every member
 /// used is public; a missing one simply leaves the slot unselected, and the caller still reports where the
-/// Pokémon was found.
+/// Pokémon was found. Party and other slots need no names at all: the control tree is searched through the
+/// public <see cref="ISlotViewer{T}"/> interface for the viewer that knows the slot.
 /// </summary>
-internal static class SaveBoxViewer
+internal static class SaveSlotViewer
 {
     private static FieldInfo? boxField;
     private static PropertyInfo? currentBoxProperty;
@@ -37,9 +38,15 @@ internal static class SaveBoxViewer
         return columns;
     }
 
-    /// <summary>Selects <paramref name="slot"/> of <paramref name="box"/> in PKHeX's box grid; false when
-    /// the grid can't be reached.</summary>
-    public static bool Select(ISaveFileProvider provider, int box, int slot)
+    /// <summary>Selects <paramref name="slot"/> in PKHeX's save view; false when it can't be reached.</summary>
+    public static bool Select(ISaveFileProvider provider, ISlotInfo slot)
+    {
+        if (slot is SlotInfoBox box)
+            return SelectBox(provider, box.Box, box.Slot);
+        return provider is Control root && FindViewer(root, slot) is { } viewer && FocusSlot(ViewerSlot(viewer, slot));
+    }
+
+    private static bool SelectBox(ISaveFileProvider provider, int box, int slot)
     {
         try
         {
@@ -49,14 +56,58 @@ internal static class SaveBoxViewer
                 return false;
             // Setting CurrentBox goes through PKHeX's own box combo, which loads the box and syncs SAV.CurrentBox.
             currentBoxProperty!.SetValue(boxEditor, box);
-            (entries[slot] as Control)?.Focus();
-            return true;
+            return FocusSlot(entries[slot] as Control);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"PKHEdit: box slot selection failed: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>The picture box showing <paramref name="slot"/>, or null when the viewer doesn't show it.</summary>
+    private static Control? ViewerSlot(ISlotViewer<PictureBox> viewer, ISlotInfo slot)
+    {
+        try
+        {
+            int index = viewer.GetViewIndex(slot);
+            return (uint)index < (uint)viewer.SlotPictureBoxes.Count ? viewer.SlotPictureBoxes[index] : null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"PKHEdit: slot view lookup failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>The viewer inside the save view that shows this slot (box grid, party, or the other-slots list).</summary>
+    private static ISlotViewer<PictureBox>? FindViewer(Control parent, ISlotInfo slot)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            if (FindViewer(child, slot) is { } nested)
+                return nested;
+        }
+        return parent is ISlotViewer<PictureBox> viewer && viewer.GetViewIndex(slot) >= 0 ? viewer : null;
+    }
+
+    /// <summary>Shows the tab page holding the slot (the party lives on its own tab), then focuses it.</summary>
+    private static bool FocusSlot(Control? slot)
+    {
+        if (slot is null)
+            return false;
+        Control? child = slot;
+        for (var parent = slot.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is TabControl tabs && child is TabPage page && tabs.SelectedTab != page)
+            {
+                tabs.SelectedTab = page;
+                break;
+            }
+            child = parent;
+        }
+        slot.Focus();
+        return true;
     }
 
     private static IList? GetEntries(ISaveFileProvider provider)

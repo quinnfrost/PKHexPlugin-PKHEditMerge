@@ -423,25 +423,42 @@ internal static class PkhService
     public static bool IsSameIndividual(PKH pkh, PKM pk, bool customTracker) => GetIdentity(pkh, pk, customTracker)
         is Identity.SameTracker or Identity.MatchedWithoutTracker or Identity.MatchedIncomingTracker or Identity.MatchedPidDiffers;
 
-    /// <summary>Box slots of <paramref name="sav"/> holding the same individual as <paramref name="pkh"/>,
-    /// in box/slot order. Read-only: the save is never modified.</summary>
-    public static List<(int Box, int Slot)> FindMatchingSlots(PKH pkh, SaveFile sav, bool customTracker)
+    /// <summary>Slots of <paramref name="sav"/> holding the same individual as <paramref name="pkh"/>: every box
+    /// slot, the party, and the save's other slots (daycare, battle box, …), in that order. Read-only.</summary>
+    public static List<ISlotInfo> FindMatchingSlots(PKH pkh, SaveFile sav, bool customTracker)
     {
-        var matches = new List<(int Box, int Slot)>();
-        if (!sav.HasBox)
-            return matches;
-        for (int box = 0; box < sav.BoxCount; box++)
+        var hits = new List<ISlotInfo>();
+        if (sav.HasBox)
         {
-            for (int slot = 0; slot < sav.BoxSlotCount; slot++)
+            for (int box = 0; box < sav.BoxCount; box++)
             {
-                var pk = sav.GetBoxSlotAtIndex(box, slot);
-                if (pk.Species == 0)
-                    continue; // empty slot
-                if (IsSameIndividual(pkh, pk, customTracker))
-                    matches.Add((box, slot));
+                for (int slot = 0; slot < sav.BoxSlotCount; slot++)
+                {
+                    var pk = sav.GetBoxSlotAtIndex(box, slot);
+                    if (pk.Species != 0 && IsSameIndividual(pkh, pk, customTracker))
+                        hits.Add(new SlotInfoBox(box, slot, sav));
+                }
             }
         }
-        return matches;
+
+        if (sav.HasParty)
+        {
+            var party = sav.PartyData; // already limited to the six party slots
+            for (int i = 0; i < party.Count; i++)
+            {
+                var pk = party[i];
+                if (pk.Species != 0 && IsSameIndividual(pkh, pk, customTracker))
+                    hits.Add(new SlotInfoParty(i));
+            }
+        }
+
+        foreach (var extra in sav.GetExtraSlots(true))
+        {
+            var pk = extra.Read(sav);
+            if (pk.Species != 0 && IsSameIndividual(pkh, pk, customTracker))
+                hits.Add(extra);
+        }
+        return hits;
     }
 
     /// <summary>
