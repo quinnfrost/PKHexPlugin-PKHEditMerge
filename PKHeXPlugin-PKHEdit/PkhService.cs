@@ -85,6 +85,19 @@ internal static class PkhService
             : FallbackPreference.FirstOrDefault(versions.Contains, HomeGameDataFormat.None);
     }
 
+    /// <summary>
+    /// Versions a HOME slot tries, in order, when rendering its sprite: the version the PKH's data came
+    /// from (the Pokémon's own game, so it keeps its own art style and sprite even when the active save's
+    /// generation is stored as well), then <see cref="GetPreferredFormat"/> as the fallback. A missing
+    /// block is reconstructed by PKHeX on export, so the source version normally renders regardless.
+    /// </summary>
+    public static HomeGameDataFormat[] GetSpriteFormats(PKH pkh, Type? savPkmType)
+    {
+        var source = GetOriginFormat(pkh.Version);
+        var preferred = GetPreferredFormat(pkh, savPkmType);
+        return source == preferred ? [source] : [source, preferred];
+    }
+
     /// <summary>Format of the version block a PKH's data originally came from (its origin game,
     /// <see cref="PKM.Version"/>) — the "source version". Mirrors PKH.OriginalGameData's mapping:
     /// GO/GP/GE→PB7, BD/SP→PB8, PLA→PA8, SL/VL→PK9, ZA→PA9, SW/SH and Gen7-→PK8.</summary>
@@ -385,6 +398,24 @@ internal static class PkhService
         if (pk.PID != pkh.PID)
             return Identity.MatchedPidDiffers;
         return pkTracker == 0 ? Identity.MatchedWithoutTracker : Identity.SameTracker;
+    }
+
+    /// <summary>
+    /// A warning line to append to the HOME slot overwrite prompt, or an empty string when the PKH about
+    /// to be written belongs to the same individual as the stored file, judged by the same rules as an
+    /// import: the same HOME tracker, or — when a tracker is 0 or the custom tracker is off — the
+    /// EC/ID32/OT fallback match. <paramref name="stored"/> is null when the file couldn't be read.
+    /// </summary>
+    public static string GetOverwriteWarning(PKH? stored, PKH incoming, bool customTracker)
+    {
+        if (stored == null)
+            return "The stored file couldn't be read, so it couldn't be compared with the editor's PKH.";
+        return GetIdentity(stored, incoming, customTracker) switch
+        {
+            Identity.SameTracker or Identity.MatchedWithoutTracker or Identity.MatchedIncomingTracker or Identity.MatchedPidDiffers => "",
+            Identity.DifferentTracker => $"HOME tracker differs (stored {stored.Tracker:X16}, editor {(incoming is IHomeTrack t ? t.Tracker : 0):X16}) — this is most likely a different Pokémon.",
+            _ => "EC, trainer ID or OT differ from the stored file — this is most likely a different Pokémon.",
+        };
     }
 
     /// <summary>

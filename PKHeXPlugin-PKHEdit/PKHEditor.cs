@@ -649,10 +649,12 @@ public partial class PKHEditor : Form
     }
 
     // Read-only surface for the HOME window: the live PKH (never mutated by callers), the save's
-    // generation (picks which stored version a box sprite shows) and the save (box wallpaper).
+    // generation (picks which stored version a box sprite shows), the save (box wallpaper) and the
+    // tracker mode (decides how an overwrite judges identity).
     internal PKH? CurrentPkh => pkh;
     internal Type EditorPkmType => saveProvider.SAV.PKMType;
     internal SaveFile ActiveSave => saveProvider.SAV;
+    internal bool UseCustomTracker => CHK_UseCustomTracker.Checked;
 
     private bool Save()
     {

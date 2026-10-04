@@ -15,9 +15,12 @@ namespace PKHEdit;
 /// a toolbar row (◀, box selector, ▶, +) over a 6×5 grid drawn on the box wallpaper. All .pkh
 /// files live flat under {run dir}/Home; which box and slot a file occupies is recorded in
 /// Home/home.json, and file names stay in PKHeX's standard form. Only .pkh files can be dragged
-/// in or out; right-click / double-click loads a slot into the PKH Editor or saves the editor's PKH there.
+/// in or out; right-click / double-click loads a slot into the PKH Editor or saves the editor's PKH there
+/// (an overwrite adds a warning line when the stored file is a different Pokémon).
 /// "+" opens another window on a different box; every window shares the one Home folder and refreshes
 /// together after any change, so a slot dragged from one window shows up in the other.
+/// Right-clicking the box selector renames boxes (the name is only a label stored in home.json — the
+/// box a file lives in is an index, so renaming moves nothing) or opens the Home folder.
 /// </summary>
 internal sealed class HomeForm : Form
 {
@@ -44,6 +47,8 @@ internal sealed class HomeForm : Form
     private readonly ToolStripMenuItem miSave;
     private readonly ToolStripMenuItem miDelete;
     private readonly ContextMenuStrip boxMenu;
+    private readonly ToolStripMenuItem miRenameBox;
+    private readonly ToolStripMenuItem miResetBoxName;
 
     // Every open HOME window: storage is shared (one Home folder + home.json), so a change made in one
     // window has to be reflected in the others.
@@ -69,9 +74,16 @@ internal sealed class HomeForm : Form
         menu.Items.Add(miDelete);
         menu.Opening += Menu_Opening;
 
-        // The flat layout keeps every box in the same folder, so right-click offers that folder directly.
+        // The flat layout keeps every box in the same folder, so right-click offers that folder directly;
+        // renaming only relabels the box in home.json, it never touches file positions.
         boxMenu = new ContextMenuStrip();
+        miRenameBox = new ToolStripMenuItem("Rename Box…", null, (_, _) => RenameBox());
+        miResetBoxName = new ToolStripMenuItem("Reset Box Name", null, (_, _) => ResetBoxName());
+        boxMenu.Items.Add(miRenameBox);
+        boxMenu.Items.Add(miResetBoxName);
+        boxMenu.Items.Add(new ToolStripSeparator());
         boxMenu.Items.Add(new ToolStripMenuItem("Show in File Explorer", null, (_, _) => OpenHomeFolder()));
+        boxMenu.Opening += (_, _) => miResetBoxName.Enabled = HomeStorage.GetBoxName(box) != HomeStorage.GetDefaultBoxName(box);
 
         // Toolbar positions are BoxEditor's own values after RecenterControls (combo centered on 417px).
         B_BoxLeft = new Button { Name = "B_BoxLeft", Location = new Point(110, 0), Size = new Size(32, 24), Text = "◀" };
@@ -87,8 +99,8 @@ internal sealed class HomeForm : Form
         };
         B_BoxRight = new Button { Name = "B_BoxRight", Location = new Point(274, 0), Size = new Size(32, 24), Text = "▶" };
         B_NewWindow = new Button { Name = "B_NewWindow", Location = new Point(GridW - 24, 0), Size = new Size(24, 24), Text = "+" };
-        for (int i = 0; i < HomeStorage.BoxCount; i++)
-            CB_BoxSelect.Items.Add(HomeStorage.GetBoxName(i));
+        foreach (var name in HomeStorage.GetBoxNames())
+            CB_BoxSelect.Items.Add(name);
 
         BoxPokeGrid = new Panel
         {
@@ -150,7 +162,7 @@ internal sealed class HomeForm : Form
         tip.SetToolTip(B_BoxLeft, "Previous box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_BoxRight, "Next box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_NewWindow, "Open another HOME window on the next box (several can be open at once).");
-        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to show the folder.");
+        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to rename the box or show the folder.");
 
         LiveWindows.Add(this);
         SelectBox(initialBox);
@@ -229,13 +241,18 @@ internal sealed class HomeForm : Form
         }
     }
 
-    // Prefer the version matching the active save (like the editor's sprite), then the shared fallback
-    // order; when the PKH carries no version data at all, ask the sprite renderer about the PKH itself.
+    // The version the PKH's data came from decides the art style (that game's own look), so a Pokémon
+    // from SV keeps SV's artwork even while an older save is open; the editor sprite stays on the active
+    // save's generation. When nothing renders, the PKH itself is asked last.
     private Image? RenderSprite(PKH pkh)
     {
-        var format = PkhService.GetPreferredFormat(pkh, editor.EditorPkmType);
-        if (format != HomeGameDataFormat.None && PkhService.Export(pkh, format) is { } exported && PKMSprite.Render(exported) is { } img)
-            return img;
+        foreach (var format in PkhService.GetSpriteFormats(pkh, editor.EditorPkmType))
+        {
+            if (format == HomeGameDataFormat.None)
+                continue;
+            if (PkhService.Export(pkh, format) is { } exported && PKMSprite.Render(exported) is { } img)
+                return img;
+        }
         return PKMSprite.Render(pkh);
     }
 
@@ -256,11 +273,59 @@ internal sealed class HomeForm : Form
 
     private void ReloadBox()
     {
+        UpdateBoxNames();
         var loaded = HomeStorage.LoadBox(box, out _);
         Array.Copy(loaded, paths, HomeStorage.SlotCount);
         SetWallpaper(box);
+        Text = $"{BaseTitle} - {HomeStorage.GetBoxName(box)}";
         for (int i = 0; i < Slots.Length; i++)
             RenderSlot(i);
+    }
+
+    /// <summary>Re-reads the box names into the selector. A rename in any window changes the shared
+    /// home.json, so the other windows pick it up here (called from every <see cref="ReloadBox"/>).</summary>
+    private void UpdateBoxNames()
+    {
+        var names = HomeStorage.GetBoxNames();
+        loading = true;
+        try
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (!string.Equals(CB_BoxSelect.Items[i] as string, names[i], StringComparison.Ordinal))
+                    CB_BoxSelect.Items[i] = names[i];
+            }
+        }
+        finally { loading = false; }
+    }
+
+    private void RenameBox()
+    {
+        var current = HomeStorage.GetBoxName(box);
+        // The framework's own input box (no bespoke dialog, localized buttons). Cancelling and clearing the
+        // field both come back empty, so an empty answer just leaves the name alone — "Reset Box Name"
+        // restores the default instead.
+        var input = Microsoft.VisualBasic.Interaction.InputBox(
+            $"Name for {HomeStorage.GetDefaultBoxName(box)} (currently \"{current}\"):", "Rename Box", current);
+        var name = input.Trim();
+        if (name.Length == 0 || string.Equals(name, current, StringComparison.Ordinal))
+            return;
+        if (!HomeStorage.SetBoxName(box, name, out var error))
+        {
+            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        RefreshAllBoxes();
+    }
+
+    private void ResetBoxName()
+    {
+        if (!HomeStorage.SetBoxName(box, null, out var error))
+        {
+            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        RefreshAllBoxes();
     }
 
     /// <summary>Re-renders after PKHeX's display language changed: the localized GameInfo name tables
@@ -523,8 +588,12 @@ internal sealed class HomeForm : Form
         var path = HomeStorage.GetCanonicalPath(box, index, current, oldPath);
         if (oldPath != null)
         {
+            // Same identity rules as an import; a different Pokémon only adds a warning line here.
+            PkhService.TryLoad(oldPath, out var stored, out _);
+            var identity = PkhService.GetOverwriteWarning(stored, current, editor.UseCustomTracker);
+            var details = identity.Length == 0 ? "" : $"\n{identity}";
             var rename = string.Equals(oldPath, path, StringComparison.OrdinalIgnoreCase) ? "" : $"\nIt will be saved as \"{Path.GetFileName(path)}\".";
-            if (MessageBox.Show(this, $"Replace \"{Path.GetFileName(oldPath)}\" with the PKH currently in the editor?{rename}", BaseTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            if (MessageBox.Show(this, $"Replace \"{Path.GetFileName(oldPath)}\" with the PKH currently in the editor?{details}{rename}", BaseTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
         }
         try

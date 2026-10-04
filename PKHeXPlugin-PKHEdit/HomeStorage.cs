@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using PKHeX.Core;
 
@@ -11,7 +12,9 @@ namespace PKHEdit;
 /// <summary>
 /// File-backed HOME storage: every .pkh sits flat under {run dir}/Home with a PKHeX-standard file
 /// name, and a manifest (Home/home.json) records which box and slot each file occupies.
-/// The manifest is the only source of truth for positions — file names carry no slot information.
+/// The manifest is the only source of truth for positions — file names carry no slot information,
+/// and neither do box display names: renaming a box only stores a label, every file stays bound to
+/// its box/slot index (so names may hold any text, including Chinese characters).
 /// Loading reconciles the manifest with the folder: files without an entry get the first free slot
 /// (the box being viewed first), entries for vanished files are dropped, and repairs are written back.
 /// Legacy layout (Box N subfolders, "007 - ..." prefixes) is not migrated — such files, if present
@@ -21,6 +24,9 @@ internal static class HomeStorage
 {
     public const int BoxCount = 32;
     public const int SlotCount = 30;
+
+    /// <summary>Longest box display name accepted by <see cref="SetBoxName"/>.</summary>
+    public const int MaxBoxNameLength = 40;
 
     // PKHeX is published as a single-file bundle with IncludeAllContentForSelfExtract: at runtime
     // AppContext.BaseDirectory points at the %LOCALAPPDATA%\Temp\.net\PKHeX\<hash> extraction folder,
@@ -32,9 +38,76 @@ internal static class HomeStorage
 
     public static string Root => Path.Combine(AppDir, "Home");
     private static string ManifestPath => Path.Combine(Root, "home.json");
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public static string GetBoxName(int box) => $"Box {box + 1}";
+    // Names are user text (often non-ASCII), so the relaxed encoder keeps home.json readable instead of
+    // writing \uXXXX escapes. It is a local metadata file, never embedded in HTML/JS, so leaving
+    // &, <, > and quotes literal is safe.
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>Default display name of a box. Only ever shown to the user — the box a file lives in is
+    /// recorded as an index in the manifest, so names can be changed without touching any file.</summary>
+    public static string GetDefaultBoxName(int box) => $"Box {box + 1}";
+
+    /// <summary>All box display names: the manifest's custom names with defaults filled in.</summary>
+    public static string[] GetBoxNames()
+    {
+        var custom = LoadManifest(out _).BoxNames;
+        var names = new string[BoxCount];
+        for (int i = 0; i < BoxCount; i++)
+            names[i] = ResolveBoxName(custom, i);
+        return names;
+    }
+
+    /// <summary>Display name of one box (its default name when it was never renamed).</summary>
+    public static string GetBoxName(int box) =>
+        (uint)box < (uint)BoxCount ? ResolveBoxName(LoadManifest(out _).BoxNames, box) : GetDefaultBoxName(box);
+
+    private static string ResolveBoxName(Dictionary<int, string> custom, int box) =>
+        custom.TryGetValue(box, out var name) && !string.IsNullOrWhiteSpace(name) ? name : GetDefaultBoxName(box);
+
+    /// <summary>Stores a box display name; null/blank (or the default name itself) resets it to
+    /// "Box N". Only the manifest is written: the files keep their box/slot indexes, and a name that
+    /// collides with another box's is allowed (nothing is ever resolved by name).</summary>
+    public static bool SetBoxName(int box, string? name, out string error)
+    {
+        error = "";
+        if ((uint)box >= (uint)BoxCount)
+        {
+            error = $"There is no box {box + 1}.";
+            return false;
+        }
+        name = name?.Trim();
+        bool reset = string.IsNullOrEmpty(name)
+                  || string.Equals(name, GetDefaultBoxName(box), StringComparison.OrdinalIgnoreCase);
+        if (!reset)
+        {
+            if (name!.Length > MaxBoxNameLength)
+            {
+                error = $"A box name can be at most {MaxBoxNameLength} characters.";
+                return false;
+            }
+            if (name.Any(char.IsControl))
+            {
+                error = "A box name can't contain line breaks or other control characters.";
+                return false;
+            }
+        }
+        var manifest = LoadManifest(out _);
+        if (reset)
+        {
+            if (!manifest.BoxNames.Remove(box))
+                return true; // already using the default name
+        }
+        else
+        {
+            manifest.BoxNames[box] = name!;
+        }
+        return SaveManifest(manifest, out error);
+    }
 
     /// <summary>Saved state of the editor's "Use Custom Tracker" checkbox (false when never stored).</summary>
     public static bool GetUseCustomTracker() => LoadManifest(out _).UseCustomTracker;
@@ -55,6 +128,10 @@ internal static class HomeStorage
 
         /// <summary>The PKH Editor's "Use Custom Tracker" checkbox; false when absent (old manifests / default).</summary>
         public bool UseCustomTracker { get; set; }
+
+        /// <summary>Display names of renamed boxes, keyed by box index; a missing box uses "Box N".
+        /// Purely a label — box identity is always the index, never the name.</summary>
+        public Dictionary<int, string> BoxNames { get; set; } = new();
 
         public Dictionary<string, Entry> Files { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
