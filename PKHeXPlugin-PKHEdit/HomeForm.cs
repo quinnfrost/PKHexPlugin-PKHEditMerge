@@ -35,6 +35,7 @@ internal sealed class HomeForm : Form
     private const string BaseTitle = "HOME Box Viewer";
 
     private readonly PKHEditor editor;
+    private readonly Button B_BoxSwap;
     private readonly Button B_BoxLeft;
     private readonly Button B_BoxRight;
     private readonly Button B_NewWindow;
@@ -47,6 +48,9 @@ internal sealed class HomeForm : Form
     private readonly ToolStripMenuItem miSave;
     private readonly ToolStripMenuItem miDelete;
     private readonly ContextMenuStrip boxMenu;
+    private readonly ToolStripMenuItem miInsertBefore;
+    private readonly ToolStripMenuItem miInsertAfter;
+    private readonly ToolStripMenuItem miDeleteBox;
     private readonly ToolStripMenuItem miRenameBox;
     private readonly ToolStripMenuItem miResetBoxName;
 
@@ -55,6 +59,7 @@ internal sealed class HomeForm : Form
     private static readonly List<HomeForm> LiveWindows = [];
 
     private readonly string?[] paths = new string?[HomeStorage.SlotCount];
+    private HomeStorage.BoxLayout layout;
     private int box;
     private bool loading;
     private Rectangle dragBox = Rectangle.Empty;
@@ -76,14 +81,22 @@ internal sealed class HomeForm : Form
 
         // The flat layout keeps every box in the same folder, so right-click offers that folder directly;
         // renaming only relabels the box in home.json, it never touches file positions.
+        // Inserting/deleting a box shifts the later box indexes (see HomeStorage.InsertBox/DeleteBox).
         boxMenu = new ContextMenuStrip();
+        miInsertBefore = new ToolStripMenuItem("Insert Box Before", null, (_, _) => InsertBox(false));
+        miInsertAfter = new ToolStripMenuItem("Insert Box After", null, (_, _) => InsertBox(true));
+        miDeleteBox = new ToolStripMenuItem("Delete Box", null, (_, _) => DeleteBox());
         miRenameBox = new ToolStripMenuItem("Rename Box…", null, (_, _) => RenameBox());
         miResetBoxName = new ToolStripMenuItem("Reset Box Name", null, (_, _) => ResetBoxName());
+        boxMenu.Items.Add(miInsertBefore);
+        boxMenu.Items.Add(miInsertAfter);
+        boxMenu.Items.Add(miDeleteBox);
+        boxMenu.Items.Add(new ToolStripSeparator());
         boxMenu.Items.Add(miRenameBox);
         boxMenu.Items.Add(miResetBoxName);
         boxMenu.Items.Add(new ToolStripSeparator());
         boxMenu.Items.Add(new ToolStripMenuItem("Show in File Explorer", null, (_, _) => OpenHomeFolder()));
-        boxMenu.Opening += (_, _) => miResetBoxName.Enabled = HomeStorage.GetBoxName(box) != HomeStorage.GetDefaultBoxName(box);
+        boxMenu.Opening += BoxMenu_Opening;
 
         // Toolbar positions are BoxEditor's own values after RecenterControls (combo centered on 417px).
         B_BoxLeft = new Button { Name = "B_BoxLeft", Location = new Point(110, 0), Size = new Size(32, 24), Text = "◀" };
@@ -99,8 +112,9 @@ internal sealed class HomeForm : Form
         };
         B_BoxRight = new Button { Name = "B_BoxRight", Location = new Point(274, 0), Size = new Size(32, 24), Text = "▶" };
         B_NewWindow = new Button { Name = "B_NewWindow", Location = new Point(GridW - 24, 0), Size = new Size(24, 24), Text = "+" };
-        foreach (var name in HomeStorage.GetBoxNames())
-            CB_BoxSelect.Items.Add(name);
+        B_BoxSwap = new Button { Name = "B_BoxSwap", Location = new Point(0, 0), Size = new Size(24, 24), TabStop = false, Text = "⇄" };
+        var names = HomeStorage.GetBoxNames(out layout);
+        CB_BoxSelect.Items.AddRange(names);
 
         BoxPokeGrid = new Panel
         {
@@ -146,23 +160,25 @@ internal sealed class HomeForm : Form
         StartPosition = FormStartPosition.CenterParent;
         AllowDrop = true;
         ClientSize = new Size(GridW, ToolbarH + GridH); // 417 × 315
-        Controls.AddRange([B_BoxLeft, CB_BoxSelect, B_BoxRight, B_NewWindow, BoxPokeGrid]);
+        Controls.AddRange([B_BoxSwap, B_BoxLeft, CB_BoxSelect, B_BoxRight, B_NewWindow, BoxPokeGrid]);
         ResumeLayout(false);
 
         CB_BoxSelect.SelectedIndexChanged += (_, _) => { if (!loading) SelectBox(CB_BoxSelect.SelectedIndex); };
-        B_BoxLeft.Click += (_, _) => SelectBox((box + HomeStorage.BoxCount - 1) % HomeStorage.BoxCount);
-        B_BoxRight.Click += (_, _) => SelectBox((box + 1) % HomeStorage.BoxCount);
+        B_BoxLeft.Click += (_, _) => SelectBox(box - 1);
+        B_BoxRight.Click += (_, _) => SelectBox(box + 1);
+        B_BoxSwap.Click += B_BoxSwap_Click;
         B_NewWindow.Click += (_, _) => OpenNewWindow();
         DragEnter += OnDragEnter;
         DragOver += OnDragOver;
         DragDrop += OnDragDrop;
         GiveFeedback += (_, e) => e.UseDefaultCursors = false;
-        MouseWheel += (_, e) => SelectBox(e.Delta > 0 ? (box + HomeStorage.BoxCount - 1) % HomeStorage.BoxCount : (box + 1) % HomeStorage.BoxCount);
+        MouseWheel += (_, e) => SelectBox(e.Delta > 0 ? box - 1 : box + 1);
 
+        tip.SetToolTip(B_BoxSwap, "Swap this box's contents with the next box (the name travels with them).");
         tip.SetToolTip(B_BoxLeft, "Previous box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_BoxRight, "Next box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_NewWindow, "Open another HOME window on the next box (several can be open at once).");
-        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to rename the box or show the folder.");
+        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to insert, delete, or rename boxes.");
 
         LiveWindows.Add(this);
         SelectBox(initialBox);
@@ -264,7 +280,13 @@ internal sealed class HomeForm : Form
 
     private void SelectBox(int index)
     {
-        box = Math.Clamp(index, 0, HomeStorage.BoxCount - 1);
+        int count = Math.Max(1, layout.Displayed);
+        // Wraparound navigation (◀ ▶, scroll wheel) uses the -1/+1 sentinels; the dropdown clamps.
+        if (index < 0)
+            index = count - 1;
+        else if (index >= count)
+            index = 0;
+        box = Math.Clamp(index, 0, count - 1);
         loading = true;
         try { CB_BoxSelect.SelectedIndex = box; }
         finally { loading = false; }
@@ -273,7 +295,8 @@ internal sealed class HomeForm : Form
 
     private void ReloadBox()
     {
-        UpdateBoxNames();
+        var names = HomeStorage.GetBoxNames(out layout);
+        UpdateBoxNames(names);
         var loaded = HomeStorage.LoadBox(box, out _);
         Array.Copy(loaded, paths, HomeStorage.SlotCount);
         SetWallpaper(box);
@@ -282,14 +305,21 @@ internal sealed class HomeForm : Form
             RenderSlot(i);
     }
 
-    /// <summary>Re-reads the box names into the selector. A rename in any window changes the shared
-    /// home.json, so the other windows pick it up here (called from every <see cref="ReloadBox"/>).</summary>
-    private void UpdateBoxNames()
+    /// <summary>Re-reads the box names into the selector, rebuilding the list when boxes were inserted or
+    /// deleted (the item count changes) and otherwise just refreshing the text in place. A rename in any
+    /// window changes the shared home.json, so the other windows pick it up here (every reload calls this).</summary>
+    private void UpdateBoxNames(string[] names)
     {
-        var names = HomeStorage.GetBoxNames();
         loading = true;
         try
         {
+            if (CB_BoxSelect.Items.Count != names.Length)
+            {
+                CB_BoxSelect.Items.Clear();
+                CB_BoxSelect.Items.AddRange(names);
+                CB_BoxSelect.SelectedIndex = Math.Clamp(box, 0, names.Length - 1);
+                return;
+            }
             for (int i = 0; i < names.Length; i++)
             {
                 if (!string.Equals(CB_BoxSelect.Items[i] as string, names[i], StringComparison.Ordinal))
@@ -297,6 +327,51 @@ internal sealed class HomeForm : Form
             }
         }
         finally { loading = false; }
+    }
+
+    /// <summary>Enables only what makes sense for the current box: inserting needs a later box to shift
+    /// into (the last shown box is the viewer's spare slot, so inserting there would change nothing),
+    /// and deleting needs an empty box.</summary>
+    private void BoxMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        bool hasLater = box < layout.Displayed - 1;
+        miInsertBefore.Enabled = miInsertAfter.Enabled = hasLater;
+        miDeleteBox.Enabled = !paths.Any(p => p != null);
+        miResetBoxName.Enabled = HomeStorage.GetBoxName(box) != HomeStorage.GetDefaultBoxName(box);
+    }
+
+    private void InsertBox(bool after)
+    {
+        int index = after ? box + 1 : box;
+        if (!HomeStorage.InsertBox(index, out var error))
+        {
+            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        RefreshAllBoxes();
+        SelectBox(index); // show the freshly inserted empty box
+    }
+
+    private void DeleteBox()
+    {
+        if (!HomeStorage.DeleteBox(box, out var error))
+        {
+            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        RefreshAllBoxes();
+        SelectBox(box); // the box that followed it now sits here
+    }
+
+    private void B_BoxSwap_Click(object? sender, EventArgs e)
+    {
+        int other = (box + 1) % Math.Max(1, layout.Displayed);
+        if (!HomeStorage.SwapBoxes(box, other, out var error))
+        {
+            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        RefreshAllBoxes();
     }
 
     private void RenameBox()
@@ -359,7 +434,7 @@ internal sealed class HomeForm : Form
     /// <summary>Opens another HOME window on the next box, offset so both stay visible.</summary>
     private void OpenNewWindow()
     {
-        var form = new HomeForm(editor, (box + 1) % HomeStorage.BoxCount)
+        var form = new HomeForm(editor, (box + 1) % Math.Max(1, layout.Displayed))
         {
             Owner = editor,
             StartPosition = FormStartPosition.Manual, // otherwise CenterParent would hide this window

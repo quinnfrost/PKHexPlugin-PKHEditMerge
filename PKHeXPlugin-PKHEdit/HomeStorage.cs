@@ -15,15 +15,32 @@ namespace PKHEdit;
 /// The manifest is the only source of truth for positions — file names carry no slot information,
 /// and neither do box display names: renaming a box only stores a label, every file stays bound to
 /// its box/slot index (so names may hold any text, including Chinese characters).
+/// How many boxes exist is part of the manifest too: <c>MaxBoxes</c> is the capacity (64 by default,
+/// set by hand in home.json) and <c>DisplayedBoxes</c> the number the viewer shows, which grows in
+/// 8-box units as the tail fills up and only ever shrinks when home.json is edited by hand.
+/// Boxes are an index, so inserting or deleting one shifts the indexes of the later boxes (a manifest
+/// rewrite); inserting drops the empty tail box, exactly like the games do.
 /// Loading reconciles the manifest with the folder: files without an entry get the first free slot
-/// (the box being viewed first), entries for vanished files are dropped, and repairs are written back.
+/// (the box being viewed first), entries for vanished files are dropped, and repairs are written back —
+/// and the first write of a new schema keeps the previous home.json as home.json.bak.
 /// Legacy layout (Box N subfolders, "007 - ..." prefixes) is not migrated — such files, if present
 /// in the Home folder, are simply treated as untracked files and given a position.
 /// </summary>
 internal static class HomeStorage
 {
-    public const int BoxCount = 32;
     public const int SlotCount = 30;
+
+    /// <summary>Boxes per display unit: the displayed count is always a multiple of this.</summary>
+    public const int BoxUnit = 8;
+
+    /// <summary>How many boxes are shown when home.json says nothing (and none of them hold anything).</summary>
+    public const int DefaultDisplayedBoxes = BoxUnit;
+
+    /// <summary>Box capacity used when home.json has no (valid) MaxBoxes.</summary>
+    public const int DefaultMaxBoxes = 64;
+
+    /// <summary>Manifest schema version written by this build; the .bak file preserves the pre-upgrade one.</summary>
+    private const int CurrentVersion = 2;
 
     /// <summary>Longest box display name accepted by <see cref="SetBoxName"/>.</summary>
     public const int MaxBoxNameLength = 40;
@@ -38,6 +55,7 @@ internal static class HomeStorage
 
     public static string Root => Path.Combine(AppDir, "Home");
     private static string ManifestPath => Path.Combine(Root, "home.json");
+    private static string BackupPath => ManifestPath + ".bak";
 
     // Names are user text (often non-ASCII), so the relaxed encoder keeps home.json readable instead of
     // writing \uXXXX escapes. It is a local metadata file, never embedded in HTML/JS, so leaving
@@ -52,19 +70,21 @@ internal static class HomeStorage
     /// recorded as an index in the manifest, so names can be changed without touching any file.</summary>
     public static string GetDefaultBoxName(int box) => $"Box {box + 1}";
 
-    /// <summary>All box display names: the manifest's custom names with defaults filled in.</summary>
-    public static string[] GetBoxNames()
+    /// <summary>All displayed box names (the manifest's custom names with defaults filled in), plus the
+    /// layout they belong to, from a single manifest read.</summary>
+    public static string[] GetBoxNames(out BoxLayout layout)
     {
-        var custom = LoadManifest(out _).BoxNames;
-        var names = new string[BoxCount];
-        for (int i = 0; i < BoxCount; i++)
-            names[i] = ResolveBoxName(custom, i);
+        var manifest = LoadManifest(out _);
+        layout = Layout(manifest);
+        var names = new string[layout.Displayed];
+        for (int i = 0; i < names.Length; i++)
+            names[i] = ResolveBoxName(manifest.BoxNames, i);
         return names;
     }
 
     /// <summary>Display name of one box (its default name when it was never renamed).</summary>
     public static string GetBoxName(int box) =>
-        (uint)box < (uint)BoxCount ? ResolveBoxName(LoadManifest(out _).BoxNames, box) : GetDefaultBoxName(box);
+        box >= 0 ? ResolveBoxName(LoadManifest(out _).BoxNames, box) : GetDefaultBoxName(box);
 
     private static string ResolveBoxName(Dictionary<int, string> custom, int box) =>
         custom.TryGetValue(box, out var name) && !string.IsNullOrWhiteSpace(name) ? name : GetDefaultBoxName(box);
@@ -75,7 +95,7 @@ internal static class HomeStorage
     public static bool SetBoxName(int box, string? name, out string error)
     {
         error = "";
-        if ((uint)box >= (uint)BoxCount)
+        if (box < 0)
         {
             error = $"There is no box {box + 1}.";
             return false;
@@ -109,6 +129,108 @@ internal static class HomeStorage
         return SaveManifest(manifest, out error);
     }
 
+    /// <summary>
+    /// Inserts an empty box at <paramref name="index"/>, shifting that box and every later one up by one.
+    /// The box pushed past the end is dropped when it was empty (the tail box is the viewer's spare slot,
+    /// so an insert is really "add one, drop the last"); when the shifted content lands in the last
+    /// displayed box, the display grows a unit instead. Fails when the last box already holds a PKH,
+    /// because that box cannot be dropped — the same rule the game uses.
+    /// </summary>
+    public static bool InsertBox(int index, out string error)
+    {
+        error = "";
+        var manifest = LoadManifest(out _);
+        var layout = Layout(manifest);
+        if (index < 0 || index >= layout.Displayed)
+        {
+            error = $"Box {index + 1} isn't one of the shown boxes.";
+            return false;
+        }
+        int last = layout.Displayed - 1;
+        if (IsOccupied(manifest, last))
+        {
+            error = $"\"{ResolveBoxName(manifest.BoxNames, last)}\" still holds a PKH, so there is no room to insert a box. Move its PKH out first.";
+            return false;
+        }
+
+        foreach (var entry in manifest.Files.Values)
+        {
+            if (entry.Box >= index)
+                entry.Box++;
+        }
+        ShiftNames(manifest, index, +1);
+        return SaveManifest(manifest, out error);
+    }
+
+    /// <summary>Deletes the empty box at <paramref name="index"/>; the boxes after it move down by one.</summary>
+    public static bool DeleteBox(int index, out string error)
+    {
+        error = "";
+        var manifest = LoadManifest(out _);
+        var layout = Layout(manifest);
+        if (index < 0 || index >= layout.Displayed)
+        {
+            error = $"Box {index + 1} isn't one of the shown boxes.";
+            return false;
+        }
+        if (IsOccupied(manifest, index))
+        {
+            error = $"\"{ResolveBoxName(manifest.BoxNames, index)}\" still holds a PKH. Move its PKH out before deleting the box.";
+            return false;
+        }
+
+        foreach (var entry in manifest.Files.Values)
+        {
+            if (entry.Box > index)
+                entry.Box--;
+        }
+        manifest.BoxNames.Remove(index);
+        ShiftNames(manifest, index + 1, -1);
+        return SaveManifest(manifest, out error);
+    }
+
+    /// <summary>Exchanges the contents of two boxes; the name follows, like a physical box whose label
+    /// travels with what is inside it. Nothing moves on disk — a manifest-only operation.</summary>
+    public static bool SwapBoxes(int boxA, int boxB, out string error)
+    {
+        error = "";
+        if (boxA == boxB)
+            return true;
+        var manifest = LoadManifest(out _);
+        foreach (var entry in manifest.Files.Values)
+        {
+            if (entry.Box == boxA)
+                entry.Box = boxB;
+            else if (entry.Box == boxB)
+                entry.Box = boxA;
+        }
+        SwapNames(manifest, boxA, boxB);
+        return SaveManifest(manifest, out error);
+    }
+
+    /// <summary>Moves the names at <paramref name="from"/> and later by <paramref name="delta"/>; shifting
+    /// up walks the keys in descending order so an entry is never overwritten.</summary>
+    private static void ShiftNames(Manifest manifest, int from, int delta)
+    {
+        var keys = manifest.BoxNames.Keys.Where(k => k >= from).OrderBy(k => delta > 0 ? -k : k).ToList();
+        foreach (var key in keys)
+        {
+            var name = manifest.BoxNames[key];
+            manifest.BoxNames.Remove(key);
+            manifest.BoxNames[key + delta] = name;
+        }
+    }
+
+    private static void SwapNames(Manifest manifest, int boxA, int boxB)
+    {
+        bool hasA = manifest.BoxNames.Remove(boxA, out var nameA);
+        bool hasB = manifest.BoxNames.Remove(boxB, out var nameB);
+        if (hasB)
+            manifest.BoxNames[boxA] = nameB!;
+        if (hasA)
+            manifest.BoxNames[boxB] = nameA!;
+    }
+
     /// <summary>Saved state of the editor's "Use Custom Tracker" checkbox (false when never stored).</summary>
     public static bool GetUseCustomTracker() => LoadManifest(out _).UseCustomTracker;
 
@@ -124,10 +246,19 @@ internal static class HomeStorage
 
     private sealed class Manifest
     {
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = CurrentVersion;
 
         /// <summary>The PKH Editor's "Use Custom Tracker" checkbox; false when absent (old manifests / default).</summary>
         public bool UseCustomTracker { get; set; }
+
+        /// <summary>How many boxes the viewer shows; a hint only, never a hard limit. Grows by
+        /// <see cref="BoxUnit"/> whenever the last displayed box holds something, and only ever shrinks
+        /// when home.json is edited by hand. Absent in an old manifest (0) → derived from what is stored.</summary>
+        public int DisplayedBoxes { get; set; }
+
+        /// <summary>How many boxes may exist at most (default <see cref="DefaultMaxBoxes"/>, set by hand in
+        /// home.json). Boxes beyond the displayed count can hold files, they are just not shown.</summary>
+        public int MaxBoxes { get; set; }
 
         /// <summary>Display names of renamed boxes, keyed by box index; a missing box uses "Box N".
         /// Purely a label — box identity is always the index, never the name.</summary>
@@ -141,6 +272,40 @@ internal static class HomeStorage
         public int Box { get; set; }
         public int Slot { get; set; }
     }
+
+    /// <summary>How many boxes exist to place files in (<see cref="Max"/>) and how many the viewer shows
+    /// (<see cref="Displayed"/>); <c>box &lt; DisplayedBoxes &lt;= MaxBoxes</c>.</summary>
+    public readonly record struct BoxLayout(int Displayed, int Max);
+
+    /// <summary>Manifest-level layout. The displayed count grows to the next whole unit <em>beyond</em> the
+    /// last stored box — i.e. it covers every stored PKH and keeps the final box free as the viewer's spare
+    /// slot — and never falls below what home.json already recorded, so it only increases (rule 1.2/1.3/1.4).
+    /// Only when the capacity is reached can the last shown box hold something.</summary>
+    private static BoxLayout Layout(Manifest manifest)
+    {
+        int max = manifest.MaxBoxes >= BoxUnit ? manifest.MaxBoxes : DefaultMaxBoxes;
+        // MaxOccupiedBox is -1 for an empty store, so this is the smallest 8-box unit beyond the last
+        // stored box: a unit whose boxes are all occupied therefore grows the display by one unit.
+        int needed = UnitEnd(MaxOccupiedBox(manifest) + 2);
+        int displayed = Math.Max(Math.Max(UnitEnd(manifest.DisplayedBoxes), DefaultDisplayedBoxes), needed);
+        return new BoxLayout(Math.Min(displayed, max), max);
+    }
+
+    /// <summary>Rounds a box count up to whole 8-box units (0 stays 0).</summary>
+    private static int UnitEnd(int boxes) => boxes <= 0 ? 0 : ((boxes + BoxUnit - 1) / BoxUnit) * BoxUnit;
+
+    private static int MaxOccupiedBox(Manifest manifest)
+    {
+        int max = -1;
+        foreach (var entry in manifest.Files.Values)
+        {
+            if (entry.Box > max)
+                max = entry.Box;
+        }
+        return max;
+    }
+
+    private static bool IsOccupied(Manifest manifest, int box) => manifest.Files.Values.Any(e => e.Box == box);
 
     /// <summary>Standard PKHeX-style file name for a PKH, without folder or clash-free suffix.</summary>
     public static string GetCanonicalName(PKH pkh) => PathUtil.CleanFileName(PkhService.GetDefaultFileName(pkh)) + ".pkh";
@@ -196,9 +361,11 @@ internal static class HomeStorage
         warning = manifestWarning;
         bool changed = false;
 
-        // Drop entries that point nowhere: missing file, or an out-of-range box/slot.
+        // Drop entries that point nowhere: a missing file, or an impossible slot. Entries in boxes beyond
+        // the displayed range are kept — they are invisible, not invalid, so lowering MaxBoxes by hand can
+        // never silently delete someone's positions.
         foreach (var key in manifest.Files
-                     .Where(kv => (uint)kv.Value.Box >= (uint)BoxCount
+                     .Where(kv => kv.Value.Box < 0
                               || (uint)kv.Value.Slot >= (uint)SlotCount
                               || !File.Exists(Path.Combine(Root, kv.Key)))
                      .Select(kv => kv.Key)
@@ -216,7 +383,7 @@ internal static class HomeStorage
                 continue;
             if (!TryFindFreeSlot(manifest, box, out var freeBox, out var freeSlot))
             {
-                warning = $"No free slot left for \"{name}\" — all {BoxCount} boxes are full.";
+                warning = $"No free slot left for \"{name}\" — all {Layout(manifest).Max} boxes are full.";
                 break;
             }
             manifest.Files[name] = new Entry { Box = freeBox, Slot = freeSlot };
@@ -238,7 +405,7 @@ internal static class HomeStorage
             }
             else
             {
-                warning = $"No free slot left for \"{kv.Key}\" — all {BoxCount} boxes are full.";
+                warning = $"No free slot left for \"{kv.Key}\" — all {Layout(manifest).Max} boxes are full.";
             }
         }
 
@@ -399,13 +566,14 @@ internal static class HomeStorage
     private static bool TryFindFreeSlot(Manifest manifest, int preferredBox, out int foundBox, out int foundSlot)
     {
         var taken = new HashSet<(int, int)>(manifest.Files.Values.Select(e => (e.Box, e.Slot)));
+        int max = Layout(manifest).Max;
         for (int pass = 0; pass < 2; pass++)
         {
             int start = pass == 0 ? preferredBox : 0;
-            int end = pass == 0 ? preferredBox + 1 : BoxCount;
+            int end = pass == 0 ? preferredBox + 1 : max;
             for (int b = start; b < end; b++)
             {
-                if ((uint)b >= (uint)BoxCount)
+                if ((uint)b >= (uint)max)
                     continue;
                 for (int s = 0; s < SlotCount; s++)
                 {
@@ -469,6 +637,16 @@ internal static class HomeStorage
         try
         {
             Directory.CreateDirectory(Root);
+            // Normalize in one place: the display never falls behind what is stored, and the counts have
+            // usable values even when an older manifest (or a hand-edited one) lacks them.
+            var layout = Layout(manifest);
+            manifest.MaxBoxes = layout.Max;
+            manifest.DisplayedBoxes = layout.Displayed;
+            manifest.Version = CurrentVersion;
+            // Keep the file as it was before this build started rewriting it, so the pre-upgrade manifest
+            // (old plugin / old schema) survives any later change. Written once, never overwritten.
+            if (File.Exists(ManifestPath) && !File.Exists(BackupPath))
+                File.Copy(ManifestPath, BackupPath);
             // Write-then-replace so a crash mid-write can never truncate the previous manifest.
             var tmp = ManifestPath + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(manifest, JsonOptions));
