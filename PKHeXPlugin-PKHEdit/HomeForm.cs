@@ -47,6 +47,7 @@ internal sealed class HomeForm : Form
     private readonly ToolStripMenuItem miLoad;
     private readonly ToolStripMenuItem miSave;
     private readonly ToolStripMenuItem miDelete;
+    private readonly ToolStripMenuItem miShowFile;
     private readonly ContextMenuStrip boxMenu;
     private readonly ToolStripMenuItem miInsertBefore;
     private readonly ToolStripMenuItem miInsertAfter;
@@ -73,10 +74,13 @@ internal sealed class HomeForm : Form
         miLoad = new ToolStripMenuItem("Load into PKH Editor", null, (_, _) => WithSlot(OpenInEditor));
         miSave = new ToolStripMenuItem("Save editor PKH here", null, (_, _) => WithSlot(SaveEditorPkhTo));
         miDelete = new ToolStripMenuItem("Delete file (Shift = skip Recycle Bin)", null, (_, _) => WithSlot(DeleteSlot));
+        miShowFile = new ToolStripMenuItem("Show in File Explorer", null, (_, _) => WithSlot(ShowSlotInFileManager));
         menu.Items.Add(miLoad);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(miSave);
         menu.Items.Add(miDelete);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(miShowFile);
         menu.Opening += Menu_Opening;
 
         // The flat layout keeps every box in the same folder, so right-click offers that folder directly;
@@ -95,7 +99,7 @@ internal sealed class HomeForm : Form
         boxMenu.Items.Add(miRenameBox);
         boxMenu.Items.Add(miResetBoxName);
         boxMenu.Items.Add(new ToolStripSeparator());
-        boxMenu.Items.Add(new ToolStripMenuItem("Show in File Explorer", null, (_, _) => OpenHomeFolder()));
+        boxMenu.Items.Add(new ToolStripMenuItem("Show in File Explorer", null, (_, _) => ShowInFileManager(null)));
         boxMenu.Opening += BoxMenu_Opening;
 
         // Toolbar positions are BoxEditor's own values after RecenterControls (combo centered on 417px).
@@ -448,18 +452,32 @@ internal sealed class HomeForm : Form
         form.Activate();
     }
 
-    /// <summary>Shows the folder holding every box file in the system file viewer.</summary>
-    private void OpenHomeFolder()
+    /// <summary>Shows the Home folder in the system file manager, scrolling to and highlighting
+    /// <paramref name="selectFile"/> when the file is there (every box file shares that one folder, so a
+    /// slot uses this to point out its own file).</summary>
+    private void ShowInFileManager(string? selectFile)
     {
         try
         {
             Directory.CreateDirectory(HomeStorage.Root);
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{HomeStorage.Root}\"") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo("explorer.exe", FileManagerArgs(selectFile)) { UseShellExecute = true });
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, $"Couldn't open {HomeStorage.Root}: {ex.Message}", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+    }
+
+    /// <summary>What explorer.exe is asked to do for <paramref name="selectFile"/>: the shell's /select
+    /// switch scrolls to and highlights that file; a file manager that doesn't know the switch just opens
+    /// the folder instead, and a vanished file falls back to the folder too.</summary>
+    internal static string FileManagerArgs(string? selectFile) =>
+        selectFile != null && File.Exists(selectFile) ? $"/select,\"{selectFile}\"" : $"\"{HomeStorage.Root}\"";
+
+    private void ShowSlotInFileManager(int index)
+    {
+        if (paths[index] is { } path)
+            ShowInFileManager(path);
     }
 
     // Wallpaper comes from PKHeX's own WallpaperUtil (PKHeX.Drawing.Misc, not on NuGet), reached by
@@ -641,7 +659,7 @@ internal sealed class HomeForm : Form
             e.Cancel = true;
             return;
         }
-        miLoad.Enabled = miDelete.Enabled = paths[i] != null;
+        miLoad.Enabled = miDelete.Enabled = miShowFile.Enabled = paths[i] != null;
         miSave.Enabled = editor.CurrentPkh != null;
     }
 

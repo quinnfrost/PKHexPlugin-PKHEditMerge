@@ -136,7 +136,6 @@ public partial class PKHEditor : Form
         {
             loading = false;
         }
-        AutoUpdateCurrentHandler(); // rule 4: re-judge after (re)selection, import or load; no-op when settled
     }
 
     // Combo holds GameInfo's localized nature names in Nature-enum order, so the selected index IS the
@@ -481,36 +480,6 @@ public partial class PKHEditor : Form
     {
         selected = format;
         RefreshSelectedVersion();
-        AutoUpdateCurrentHandler(); // rule 4: auto-judge OT/HT whenever the version selection changes
-    }
-
-    /// <summary>Rule 4 (auto Current Handler): only while the selected version is the source version
-    /// (the block matching the PKH's origin game) is CurrentHandler judged against the main editor's
-    /// save protagonist, using PKHeX's own predicates —
-    /// OT side = TradeOT/BelongsTo in full: origin game + both raw IDs (表ID/里ID, the OT/Misc display
-    /// pair is a lossless view of ID32) + OT gender + OT name all equal → handler = OT (0);
-    /// HT side = IsHandlerSame (HT name+gender equal to the save's OT): the exact TradeHT case that
-    /// sets handler = 1 while leaving HT fields untouched — the complementary TradeHT case would also
-    /// rewrite HT name/lang/gender/friendship/memories, which is out of scope (CurrentHandler only).
-    /// No evidence leaves the imported value untouched; PC9-read-only and no-version states are no-ops.</summary>
-    private void AutoUpdateCurrentHandler()
-    {
-        if (loading || pkh == null || PkhService.HasPC9(pkh))
-            return;
-        if (selected == HomeGameDataFormat.None || selected != PkhService.GetOriginFormat(pkh.Version))
-            return; // not viewing the source version — never touch the field
-        var sav = saveProvider.SAV;
-        byte? desired;
-        if (pkh.Version == sav.Version && pkh.TID16 == sav.TID16 && pkh.SID16 == sav.SID16
-            && pkh.OriginalTrainerGender == sav.Gender && pkh.OriginalTrainerName == sav.OT)
-            desired = 0; // PKHeX BelongsTo → TradeOT concludes OT
-        else if (!pkh.IsUntraded && pkh.HandlingTrainerName == sav.OT && pkh.HandlingTrainerGender == sav.Gender)
-            desired = 1; // PKHeX IsHandlerSame → TradeHT concludes HT (no field rewrite needed)
-        else
-            desired = null; // neither side matches — no evidence, keep the imported value
-        if (desired is not { } target || pkh.CurrentHandler == target)
-            return;
-        Edit(p => p.CurrentHandler = target, $"current handler ({(target == 0 ? "OT" : "HT")})");
     }
 
     // Reconstructs a missing version from whichever stored version is nearest, exactly like PKHeX does when
