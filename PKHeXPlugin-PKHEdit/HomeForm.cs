@@ -49,9 +49,7 @@ internal sealed class HomeForm : Form
     private readonly ToolStripMenuItem miDelete;
     private readonly ToolStripMenuItem miShowFile;
     private readonly ContextMenuStrip boxMenu;
-    private readonly ToolStripMenuItem miInsertBefore;
-    private readonly ToolStripMenuItem miInsertAfter;
-    private readonly ToolStripMenuItem miDeleteBox;
+    private readonly ToolStripMenuItem miSwapBox;
     private readonly ToolStripMenuItem miRenameBox;
     private readonly ToolStripMenuItem miResetBoxName;
 
@@ -84,17 +82,13 @@ internal sealed class HomeForm : Form
         menu.Opening += Menu_Opening;
 
         // The flat layout keeps every box in the same folder, so right-click offers that folder directly;
-        // renaming only relabels the box in home.json, it never touches file positions.
-        // Inserting/deleting a box shifts the later box indexes (see HomeStorage.InsertBox/DeleteBox).
+        // renaming only relabels the box in home.json, it never touches file positions, and switching two
+        // boxes exchanges their indexes and names (see HomeStorage.SwapBoxes).
         boxMenu = new ContextMenuStrip();
-        miInsertBefore = new ToolStripMenuItem("Insert Box Before", null, (_, _) => InsertBox(false));
-        miInsertAfter = new ToolStripMenuItem("Insert Box After", null, (_, _) => InsertBox(true));
-        miDeleteBox = new ToolStripMenuItem("Delete Box", null, (_, _) => DeleteBox());
+        miSwapBox = new ToolStripMenuItem("Switch Box With…", null, (_, _) => SwapBoxWith());
         miRenameBox = new ToolStripMenuItem("Rename Box…", null, (_, _) => RenameBox());
         miResetBoxName = new ToolStripMenuItem("Reset Box Name", null, (_, _) => ResetBoxName());
-        boxMenu.Items.Add(miInsertBefore);
-        boxMenu.Items.Add(miInsertAfter);
-        boxMenu.Items.Add(miDeleteBox);
+        boxMenu.Items.Add(miSwapBox);
         boxMenu.Items.Add(new ToolStripSeparator());
         boxMenu.Items.Add(miRenameBox);
         boxMenu.Items.Add(miResetBoxName);
@@ -182,7 +176,7 @@ internal sealed class HomeForm : Form
         tip.SetToolTip(B_BoxLeft, "Previous box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_BoxRight, "Next box (wraps around). Scroll wheel works too.");
         tip.SetToolTip(B_NewWindow, "Open another HOME window on the next box (several can be open at once).");
-        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to insert, delete, or rename boxes.");
+        tip.SetToolTip(CB_BoxSelect, $"Boxes are stored in:\n{HomeStorage.Root}\nRight-click to switch or rename boxes.");
 
         LiveWindows.Add(this);
         SelectBox(initialBox);
@@ -309,8 +303,8 @@ internal sealed class HomeForm : Form
             RenderSlot(i);
     }
 
-    /// <summary>Re-reads the box names into the selector, rebuilding the list when boxes were inserted or
-    /// deleted (the item count changes) and otherwise just refreshing the text in place. A rename in any
+    /// <summary>Re-reads the box names into the selector, rebuilding the list when the box count changed
+    /// (the display grew) and otherwise just refreshing the text in place. A rename or switch in any
     /// window changes the shared home.json, so the other windows pick it up here (every reload calls this).</summary>
     private void UpdateBoxNames(string[] names)
     {
@@ -333,38 +327,37 @@ internal sealed class HomeForm : Form
         finally { loading = false; }
     }
 
-    /// <summary>Enables only what makes sense for the current box: inserting needs a later box to shift
-    /// into (the last shown box is the viewer's spare slot, so inserting there would change nothing),
-    /// and deleting needs an empty box.</summary>
+    /// <summary>Enables only what makes sense for the current box: switching needs another shown box.</summary>
     private void BoxMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        bool hasLater = box < layout.Displayed - 1;
-        miInsertBefore.Enabled = miInsertAfter.Enabled = hasLater;
-        miDeleteBox.Enabled = !paths.Any(p => p != null);
+        miSwapBox.Enabled = layout.Displayed > 1;
         miResetBoxName.Enabled = HomeStorage.GetBoxName(box) != HomeStorage.GetDefaultBoxName(box);
     }
 
-    private void InsertBox(bool after)
+    /// <summary>Swaps this box with another shown one, named by the user like Rename Box. The contents
+    /// and the names both move, so everything the two boxes hold is preserved.</summary>
+    private void SwapBoxWith()
     {
-        int index = after ? box + 1 : box;
-        if (!HomeStorage.InsertBox(index, out var error))
+        var current = HomeStorage.GetBoxName(box);
+        var input = Microsoft.VisualBasic.Interaction.InputBox(
+            $"Swap \"{current}\" with which box? Enter a number from 1 to {layout.Displayed}:", "Switch Box With", "");
+        var text = input.Trim();
+        if (text.Length == 0)
+            return;
+        if (!int.TryParse(text, out int number) || number < 1 || number > layout.Displayed)
+        {
+            MessageBox.Show(this, $"Enter a box number between 1 and {layout.Displayed}.", BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        int other = number - 1;
+        if (other == box)
+            return;
+        if (!HomeStorage.SwapBoxes(box, other, out var error))
         {
             MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         RefreshAllBoxes();
-        SelectBox(index); // show the freshly inserted empty box
-    }
-
-    private void DeleteBox()
-    {
-        if (!HomeStorage.DeleteBox(box, out var error))
-        {
-            MessageBox.Show(this, error, BaseTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        RefreshAllBoxes();
-        SelectBox(box); // the box that followed it now sits here
     }
 
     private void B_BoxSwap_Click(object? sender, EventArgs e)

@@ -17,9 +17,10 @@ namespace PKHEdit;
 /// its box/slot index (so names may hold any text, including Chinese characters).
 /// How many boxes exist is part of the manifest too: <c>MaxBoxes</c> is the capacity (64 by default,
 /// set by hand in home.json) and <c>DisplayedBoxes</c> the number the viewer shows, which grows in
-/// 8-box units as the tail fills up and only ever shrinks when home.json is edited by hand.
-/// Boxes are an index, so inserting or deleting one shifts the indexes of the later boxes (a manifest
-/// rewrite); inserting drops the empty tail box, exactly like the games do.
+/// 8-box units once every shown box holds at least one PKH and only ever shrinks when home.json is
+/// edited by hand.
+/// Boxes are an index, so swapping two of them exchanges the recorded indexes and names (a
+/// manifest-only rewrite) without shifting anything else.
 /// Loading reconciles the manifest with the folder: files without an entry get the first free slot
 /// (the box being viewed first), entries for vanished files are dropped, and repairs are written back —
 /// and the first write of a new schema keeps the previous home.json as home.json.bak.
@@ -129,66 +130,6 @@ internal static class HomeStorage
         return SaveManifest(manifest, out error);
     }
 
-    /// <summary>
-    /// Inserts an empty box at <paramref name="index"/>, shifting that box and every later one up by one.
-    /// The box pushed past the end is dropped when it was empty (the tail box is the viewer's spare slot,
-    /// so an insert is really "add one, drop the last"); when the shifted content lands in the last
-    /// displayed box, the display grows a unit instead. Fails when the last box already holds a PKH,
-    /// because that box cannot be dropped — the same rule the game uses.
-    /// </summary>
-    public static bool InsertBox(int index, out string error)
-    {
-        error = "";
-        var manifest = LoadManifest(out _);
-        var layout = Layout(manifest);
-        if (index < 0 || index >= layout.Displayed)
-        {
-            error = $"Box {index + 1} isn't one of the shown boxes.";
-            return false;
-        }
-        int last = layout.Displayed - 1;
-        if (IsOccupied(manifest, last))
-        {
-            error = $"\"{ResolveBoxName(manifest.BoxNames, last)}\" still holds a PKH, so there is no room to insert a box. Move its PKH out first.";
-            return false;
-        }
-
-        foreach (var entry in manifest.Files.Values)
-        {
-            if (entry.Box >= index)
-                entry.Box++;
-        }
-        ShiftNames(manifest, index, +1);
-        return SaveManifest(manifest, out error);
-    }
-
-    /// <summary>Deletes the empty box at <paramref name="index"/>; the boxes after it move down by one.</summary>
-    public static bool DeleteBox(int index, out string error)
-    {
-        error = "";
-        var manifest = LoadManifest(out _);
-        var layout = Layout(manifest);
-        if (index < 0 || index >= layout.Displayed)
-        {
-            error = $"Box {index + 1} isn't one of the shown boxes.";
-            return false;
-        }
-        if (IsOccupied(manifest, index))
-        {
-            error = $"\"{ResolveBoxName(manifest.BoxNames, index)}\" still holds a PKH. Move its PKH out before deleting the box.";
-            return false;
-        }
-
-        foreach (var entry in manifest.Files.Values)
-        {
-            if (entry.Box > index)
-                entry.Box--;
-        }
-        manifest.BoxNames.Remove(index);
-        ShiftNames(manifest, index + 1, -1);
-        return SaveManifest(manifest, out error);
-    }
-
     /// <summary>Exchanges the contents of two boxes; the name follows, like a physical box whose label
     /// travels with what is inside it. Nothing moves on disk — a manifest-only operation.</summary>
     public static bool SwapBoxes(int boxA, int boxB, out string error)
@@ -206,19 +147,6 @@ internal static class HomeStorage
         }
         SwapNames(manifest, boxA, boxB);
         return SaveManifest(manifest, out error);
-    }
-
-    /// <summary>Moves the names at <paramref name="from"/> and later by <paramref name="delta"/>; shifting
-    /// up walks the keys in descending order so an entry is never overwritten.</summary>
-    private static void ShiftNames(Manifest manifest, int from, int delta)
-    {
-        var keys = manifest.BoxNames.Keys.Where(k => k >= from).OrderBy(k => delta > 0 ? -k : k).ToList();
-        foreach (var key in keys)
-        {
-            var name = manifest.BoxNames[key];
-            manifest.BoxNames.Remove(key);
-            manifest.BoxNames[key + delta] = name;
-        }
     }
 
     private static void SwapNames(Manifest manifest, int boxA, int boxB)
@@ -252,7 +180,7 @@ internal static class HomeStorage
         public bool UseCustomTracker { get; set; }
 
         /// <summary>How many boxes the viewer shows; a hint only, never a hard limit. Grows by
-        /// <see cref="BoxUnit"/> whenever the last displayed box holds something, and only ever shrinks
+        /// <see cref="BoxUnit"/> once every shown box holds at least one PKH, and only ever shrinks
         /// when home.json is edited by hand. Absent in an old manifest (0) → derived from what is stored.</summary>
         public int DisplayedBoxes { get; set; }
 
@@ -277,35 +205,36 @@ internal static class HomeStorage
     /// (<see cref="Displayed"/>); <c>box &lt; DisplayedBoxes &lt;= MaxBoxes</c>.</summary>
     public readonly record struct BoxLayout(int Displayed, int Max);
 
-    /// <summary>Manifest-level layout. The displayed count grows to the next whole unit <em>beyond</em> the
-    /// last stored box — i.e. it covers every stored PKH and keeps the final box free as the viewer's spare
-    /// slot — and never falls below what home.json already recorded, so it only increases (rule 1.2/1.3/1.4).
-    /// Only when the capacity is reached can the last shown box hold something.</summary>
+    /// <summary>Manifest-level layout. The displayed count grows by whole units, one at a time, only while
+    /// every box it already shows holds at least one PKH, and never falls below what home.json recorded,
+    /// so it only increases. Growth stops at the capacity.</summary>
     private static BoxLayout Layout(Manifest manifest)
     {
         int max = manifest.MaxBoxes >= BoxUnit ? manifest.MaxBoxes : DefaultMaxBoxes;
-        // MaxOccupiedBox is -1 for an empty store, so this is the smallest 8-box unit beyond the last
-        // stored box: a unit whose boxes are all occupied therefore grows the display by one unit.
-        int needed = UnitEnd(MaxOccupiedBox(manifest) + 2);
-        int displayed = Math.Max(Math.Max(UnitEnd(manifest.DisplayedBoxes), DefaultDisplayedBoxes), needed);
+        int displayed = Math.Max(UnitEnd(manifest.DisplayedBoxes), DefaultDisplayedBoxes);
+        while (displayed < max && AllBoxesOccupied(manifest, displayed))
+            displayed += BoxUnit;
         return new BoxLayout(Math.Min(displayed, max), max);
     }
 
     /// <summary>Rounds a box count up to whole 8-box units (0 stays 0).</summary>
     private static int UnitEnd(int boxes) => boxes <= 0 ? 0 : ((boxes + BoxUnit - 1) / BoxUnit) * BoxUnit;
 
-    private static int MaxOccupiedBox(Manifest manifest)
+    /// <summary>True when every box in [0, <paramref name="count"/>) holds at least one PKH.</summary>
+    private static bool AllBoxesOccupied(Manifest manifest, int count)
     {
-        int max = -1;
+        if (count <= 0)
+            return false;
+        var occupied = new HashSet<int>();
         foreach (var entry in manifest.Files.Values)
+            occupied.Add(entry.Box);
+        for (int i = 0; i < count; i++)
         {
-            if (entry.Box > max)
-                max = entry.Box;
+            if (!occupied.Contains(i))
+                return false;
         }
-        return max;
+        return true;
     }
-
-    private static bool IsOccupied(Manifest manifest, int box) => manifest.Files.Values.Any(e => e.Box == box);
 
     /// <summary>Standard PKHeX-style file name for a PKH, without folder or clash-free suffix.</summary>
     public static string GetCanonicalName(PKH pkh) => PathUtil.CleanFileName(PkhService.GetDefaultFileName(pkh)) + ".pkh";
