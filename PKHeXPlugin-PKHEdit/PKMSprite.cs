@@ -7,7 +7,7 @@ using System.Reflection;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 // Borrows PKHeX's already-loaded sprite renderer, so no compile-time reference to PKHeX.Drawing.PokeSprite is needed.
 // PKHeX.Drawing.PokeSprite isn't on NuGet; referencing it directly would mean pointing at a local build of the
@@ -49,7 +49,7 @@ internal static class PKMSprite
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"PKMMerge: sprite render failed: {ex.Message}");
+            Debug.WriteLine($"PKHEdit: sprite render failed: {ex.Message}");
             return null;
         }
     }
@@ -65,7 +65,7 @@ internal static class PKMSprite
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"PKMMerge: editor preview copy failed: {ex.Message}");
+            Debug.WriteLine($"PKHEdit: editor preview copy failed: {ex.Message}");
             return null;
         }
     }
@@ -136,7 +136,7 @@ internal static class PKMSprite
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"PKMMerge: blank save probe for {blankSav.GetType().Name} failed: {ex.Message}");
+            Debug.WriteLine($"PKHEdit: blank save probe for {blankSav.GetType().Name} failed: {ex.Message}");
             return null;
         }
     }

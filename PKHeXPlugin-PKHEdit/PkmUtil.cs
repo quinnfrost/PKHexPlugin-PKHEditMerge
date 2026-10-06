@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Helpers shared by the plugin's windows.</summary>
 internal static class PkmUtil
@@ -82,10 +82,42 @@ internal static class PkmUtil
         }
     }
 
-    private static async Task DeleteLaterAsync(string file)
+    /// <summary>Data format tagging a drag with its origin slot inside a HOME window: the full path of
+    /// the dragged .pkh, so the receiving window can move/swap it out of the shared storage.</summary>
+    public const string SlotDataFormat = "PKHEdit.HomeSlot";
+
+    /// <summary>Drags <paramref name="pkh"/> out of <paramref name="source"/> as a temporary .pkh file, like the editor's sprite drag.</summary>
+    public static void DragOutPkh(Control source, PKH pkh, string? slotTag = null)
+    {
+        if (!PkhService.TrySerialize(pkh, out var data, out _))
+            return; // e.g. PC9 data can't be serialized; same silent behavior the editor's sprite had.
+        string? file = null;
+        try
+        {
+            file = Path.Combine(Path.GetTempPath(), PathUtil.CleanFileName($"{PkhService.GetDefaultFileName(pkh)}.pkh"));
+            File.WriteAllBytes(file, data);
+            var obj = new DataObject();
+            obj.SetData(DataFormats.FileDrop, new[] { file });
+            if (slotTag != null)
+                obj.SetData(SlotDataFormat, slotTag);
+            // Copy only: PKHeX's box slots treat Link as "moved to another slot".
+            source.DoDragDrop(obj, DragDropEffects.Copy);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Drag && Drop failed: {ex.Message}", source.FindForm()?.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (file != null)
+                _ = DeleteLaterAsync(file);
+        }
+    }
+
+    private static async Task DeleteLaterAsync(string path)
     {
         await Task.Delay(TempFileLifetime).ConfigureAwait(false);
-        try { File.Delete(file); }
+        try { File.Delete(path); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }

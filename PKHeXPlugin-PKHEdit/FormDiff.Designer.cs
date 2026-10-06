@@ -1,4 +1,4 @@
-namespace PKMMerge
+namespace PKHEdit
 {
     partial class FormDiff
     {
@@ -35,7 +35,7 @@ namespace PKMMerge
             op1 = new System.Windows.Forms.DataGridViewButtonColumn();
             op2 = new System.Windows.Forms.DataGridViewButtonColumn();
             value2 = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            CB_HideEmpty = new System.Windows.Forms.CheckBox();
+            CB_HideUnavail = new System.Windows.Forms.CheckBox();
             CB_HideSame = new System.Windows.Forms.CheckBox();
             B_Import1 = new System.Windows.Forms.Button();
             B_Import2 = new System.Windows.Forms.Button();
@@ -131,17 +131,17 @@ namespace PKMMerge
             CB_HideSame.UseVisualStyleBackColor = true;
             CB_HideSame.CheckedChanged += CB_HideSame_CheckedChanged;
             // 
-            // CB_HideEmpty
+            // CB_HideUnavail
             // 
-            CB_HideEmpty.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            CB_HideEmpty.AutoSize = true;
-            CB_HideEmpty.Location = new System.Drawing.Point(316, 71);
-            CB_HideEmpty.Name = "CB_HideEmpty";
-            CB_HideEmpty.Size = new System.Drawing.Size(90, 21);
-            CB_HideEmpty.TabIndex = 4;
-            CB_HideEmpty.Text = "Hide empty";
-            CB_HideEmpty.UseVisualStyleBackColor = true;
-            CB_HideEmpty.CheckedChanged += CB_HideEmpty_CheckedChanged;
+            CB_HideUnavail.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            CB_HideUnavail.AutoSize = true;
+            CB_HideUnavail.Location = new System.Drawing.Point(316, 71);
+            CB_HideUnavail.Name = "CB_HideUnavail";
+            CB_HideUnavail.Size = new System.Drawing.Size(106, 21);
+            CB_HideUnavail.TabIndex = 4;
+            CB_HideUnavail.Text = "Hide unavail";
+            CB_HideUnavail.UseVisualStyleBackColor = true;
+            CB_HideUnavail.CheckedChanged += CB_HideUnavail_CheckedChanged;
             // 
             // GB_PKM1
             // 
@@ -286,11 +286,11 @@ namespace PKMMerge
             Controls.Add(CB_HideSame);
             Controls.Add(dataGridView1);
             Controls.Add(GB_PKM2);
-            Controls.Add(CB_HideEmpty);
+            Controls.Add(CB_HideUnavail);
             Margin = new System.Windows.Forms.Padding(2);
             MinimumSize = new System.Drawing.Size(736, 400);
             Name = "FormDiff";
-            Text = "PKMMerge";
+            Text = "PKM Compare";
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
@@ -305,7 +305,7 @@ namespace PKMMerge
         #endregion
 
         private System.Windows.Forms.DataGridView dataGridView1;
-        private System.Windows.Forms.CheckBox CB_HideEmpty;
+        private System.Windows.Forms.CheckBox CB_HideUnavail;
         private System.Windows.Forms.CheckBox CB_HideSame;
         private System.Windows.Forms.Button B_Import1;
         private System.Windows.Forms.Button B_Import2;

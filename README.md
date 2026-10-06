@@ -1,4 +1,4 @@
-# PKHeXPlugin-PKMMerge
+# PKHeXPlugin-PKHEdit
 
 PKM comparison and merge plugin for [PKHeX](https://github.com/kwsch/PKHeX).
 

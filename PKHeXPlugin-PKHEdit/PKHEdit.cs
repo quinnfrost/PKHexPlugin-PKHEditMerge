@@ -1,18 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
-public class PKMMerge : IPlugin
+public class PKHEdit : IPlugin
 {
-    public string Name => nameof(PKMMerge);
+    public string Name => nameof(PKHEdit);
     public int Priority => 1; // Loading order, lowest is first.
 
     public ISaveFileProvider SaveFileEditor { get; private set; } = null!;
     public IPKMView PKMEditor { get; private set; } = null!;
 
-    private FormDiff? formDiff;
+    // One plain (owner-less) Compare window per menu click — several can be open at once.
+    private readonly List<FormDiff> compareForms = [];
     private PKHEditor? pkhEditor;
 
     public void Initialize(params object[] args)
@@ -32,7 +34,7 @@ public class PKMMerge : IPlugin
 
         var root = new ToolStripMenuItem(Name);
         var compare = new ToolStripMenuItem("PKM Compare");
-        compare.Click += (_, _) => formDiff = Show(formDiff, () => new FormDiff(PKMEditor, SaveFileEditor));
+        compare.Click += (_, _) => NewCompareWindow();
         var homeEditor = new ToolStripMenuItem("PKH Editor");
         homeEditor.Click += (_, _) => pkhEditor = Show(pkhEditor, () => new PKHEditor(PKMEditor, SaveFileEditor));
         root.DropDownItems.Add(compare);
@@ -56,10 +58,21 @@ public class PKMMerge : IPlugin
         return existing;
     }
 
+    // Unlike the PKH Editor (single instance), every menu click opens a NEW plain Compare window.
+    private void NewCompareWindow()
+    {
+        var form = new FormDiff(PKMEditor, SaveFileEditor);
+        form.FormClosed += (_, _) => compareForms.Remove(form);
+        compareForms.Add(form);
+        form.Show();
+        form.Activate();
+    }
+
     public void NotifyDisplayLanguageChanged(string language)
     {
-        if (formDiff is { IsDisposed: false } form)
-            form.RefreshNames();
+        foreach (var form in compareForms)
+            if (!form.IsDisposed)
+                form.RefreshNames();
         if (pkhEditor is { IsDisposed: false } editor)
             editor.RefreshNames();
     }

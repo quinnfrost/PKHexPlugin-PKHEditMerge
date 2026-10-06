@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch PKHeX with PKMMerge plugin",
+            "name": "Launch PKHeX with PKHEdit plugin",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",

@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using PKHeX.Core;
 
-namespace PKMMerge;
+namespace PKHEdit;
 
 /// <summary>Display text for a property value, and whether it can be meaningfully compared.</summary>
 internal readonly record struct PropertyValue(string Display, bool IsComparable)

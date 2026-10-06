@@ -11,7 +11,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace PKMMerge
+namespace PKHEdit
 {
     public partial class FormDiff : Form
     {
@@ -130,7 +130,12 @@ namespace PKMMerge
                     Evaluate(info, out var display1, out var display2);
                     if (CB_HideSame.Checked && info.IsEqual)
                         continue;
-                    if (CB_HideEmpty.Checked && info.State is DiffState.Empty or DiffState.Incomparable)
+                    // Hide unavail: empty/undisplayable rows, plus rows where neither side is editable
+                    // (both value cells grey — PropertyValue.CanEdit: no public setter, non-scalar type,
+                    // or read-only span; see SetValueCell's ReadOnlyTextColor).
+                    if (CB_HideUnavail.Checked
+                        && (info.State is DiffState.Empty or DiffState.Incomparable
+                            || !info.CanEdit1 && !info.CanEdit2))
                         continue;
 
                     var row = dataGridView1.Rows[dataGridView1.Rows.Add(key)];
@@ -559,6 +564,15 @@ namespace PKMMerge
             UpdateHeaderIds();
         }
 
+        /// <summary>Programmatically fills both sides (import report's Compare button); the same
+        /// sequence the drop handler runs: set each side, then rebuild the row list.</summary>
+        public void SetEntities(PKM left, PKM right)
+        {
+            SetSide(1, left, fromEditor: false);
+            SetSide(2, right, fromEditor: false);
+            UpdateList();
+        }
+
         #region Header IDs (checksum / PID / EC)
 
         private HeaderIds CreateHeaderIds(GroupBox box)
@@ -793,7 +807,7 @@ namespace PKMMerge
                 edit.PopulateFields(p);
         }
 
-        private void CB_HideEmpty_CheckedChanged(object sender, EventArgs e)
+        private void CB_HideUnavail_CheckedChanged(object sender, EventArgs e)
         {
             UpdateList();
         }
